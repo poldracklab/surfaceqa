@@ -1,3 +1,5 @@
+import pytest
+
 from surfaceqa.discover import find_subjects
 from tests.synth import write_subject
 
@@ -27,3 +29,15 @@ def test_find_subjects_filters_by_shell_pattern(synth_sources):
     write_subject(synth_sources[0], name="sub-02")
     refs = find_subjects(synth_sources, patterns=["sub-02"])
     assert [r.name for r in refs] == ["sub-02"]
+
+
+def test_a_subject_named_twice_is_listed_once(synth_sources):
+    refs = find_subjects([synth_sources[0], synth_sources[0] / "sub-01"])
+    assert [r.key for r in refs] == ["fastsurfer__sub-01"]
+
+
+def test_two_different_folders_with_the_same_key_are_refused(tmp_path):
+    a = write_subject(tmp_path / "siteA" / "freesurfer").parent
+    b = write_subject(tmp_path / "siteB" / "freesurfer").parent
+    with pytest.raises(ValueError, match="freesurfer__sub-01"):
+        find_subjects([a, b])

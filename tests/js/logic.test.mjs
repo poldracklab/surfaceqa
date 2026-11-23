@@ -2,6 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import {
   sliceSegments, gridToScreen, screenToGrid, clampSlice, crosshairs, initialCursor, fit, zoomAt,
+  isHideKey,
 } from "../../src/surfaceqa/web/static/logic.js";
 
 const coronal = {axis: 1, h_axis: 0, v_axis: 2, h_flip: true, v_flip: true, width: 32, height: 40, n_slices: 48};
@@ -49,4 +50,12 @@ test("zoomAt keeps the pointed pixel fixed", () => {
   assert.equal(v.scale, 20);
   assert.equal((200 - v.dx) / v.scale, (200 - 160) / 10);
   assert.equal(zoomAt({scale: 20, dx: 0, dy: 0}, 4, 0, 0).scale, 32);
+});
+
+test("isHideKey is the plain s key only", () => {
+  assert.equal(isHideKey({code: "KeyS", key: "s"}), true);
+  assert.equal(isHideKey({code: "KeyS", key: "S", shiftKey: true}), true); // releasing with shift still counts
+  assert.equal(isHideKey({code: "KeyS", key: "s", metaKey: true}), false); // cmd+s is not "hide"
+  assert.equal(isHideKey({code: "KeyS", key: "s", ctrlKey: true}), false);
+  assert.equal(isHideKey({code: "KeyA", key: "a"}), false);
 });

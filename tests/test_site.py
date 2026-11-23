@@ -46,3 +46,37 @@ def test_subject_names_are_html_escaped(tmp_path):
     build_all(find_subjects([subj]), qa)
     write_site(qa)
     assert "<b>x" not in (qa / "index.html").read_text()
+
+
+def test_subject_page_has_a_slice_slider_per_view(qa):
+    html = (qa / "subjects" / "fastsurfer__sub-01" / "index.html").read_text()
+    assert html.count('type="range"') == 3
+
+
+def test_subject_whose_latest_build_is_missing_files_is_not_shown_as_ready(qa, synth_sources):
+    (synth_sources[0] / "sub-01" / "surf" / "rh.white").unlink()
+    build_all(find_subjects(synth_sources), qa)
+    write_site(qa)
+    index = (qa / "index.html").read_text()
+    assert index.count(">ready<") == 1 and index.count(">missing files<") == 2
+    page = (qa / "subjects" / "fastsurfer__sub-01" / "index.html").read_text()
+    assert "surf/rh.white" in page
+    assert "shows the previous build" in page and page.count("<canvas") == 3
+
+
+def test_subject_whose_latest_build_failed_is_not_shown_as_ready(qa, synth_sources):
+    (synth_sources[0] / "sub-01" / "surf" / "rh.white").write_bytes(b"junk")
+    build_all(find_subjects(synth_sources), qa)
+    write_site(qa)
+    index = (qa / "index.html").read_text()
+    assert index.count(">ready<") == 1 and index.count(">build failed<") == 1
+    page = (qa / "subjects" / "fastsurfer__sub-01" / "index.html").read_text()
+    assert "shows the previous build" in page and "error.txt" in page
+
+
+def test_subject_names_are_escaped_on_the_subject_page(tmp_path):
+    subj = write_subject(tmp_path / "src", name="sub-<b>x")
+    qa = tmp_path / "qa"
+    build_all(find_subjects([subj]), qa)
+    write_site(qa)
+    assert "<b>x" not in (qa / "subjects" / "fastsurfer__sub-<b>x" / "index.html").read_text()

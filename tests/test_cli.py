@@ -35,3 +35,24 @@ def test_cli_build_no_subjects_found(tmp_path, capsys):
     (tmp_path / "empty").mkdir()
     assert main(["build", str(tmp_path / "empty"), "--out", str(tmp_path / "qa")]) == 2
     assert "no subjects found" in capsys.readouterr().err.lower()
+
+
+def test_cli_single_subject_source_defaults_out_beside_the_subjects_folder(synth_sources):
+    subject = synth_sources[0] / "sub-01"
+    assert main(["build", str(subject)]) == 0
+    assert not (synth_sources[0] / "surfaceqa").exists()  # never inside the subjects folder
+    assert (synth_sources[0].parent / "surfaceqa" / "index.html").exists()
+
+
+def test_cli_refuses_out_inside_the_subjects_folder_of_a_single_subject(synth_sources, capsys):
+    subject = synth_sources[0] / "sub-01"
+    assert main(["build", str(subject), "--out", str(synth_sources[0] / "qa")]) == 2
+    assert not (synth_sources[0] / "qa").exists()
+
+
+def test_cli_refuses_two_sources_that_would_share_a_key(tmp_path, capsys):
+    a = write_subject(tmp_path / "siteA" / "freesurfer", pipeline="freesurfer").parent
+    b = write_subject(tmp_path / "siteB" / "freesurfer", pipeline="freesurfer").parent
+    assert main(["build", str(a), str(b), "--out", str(tmp_path / "qa")]) == 2
+    assert "freesurfer__sub-01" in capsys.readouterr().err
+    assert not (tmp_path / "qa").exists()

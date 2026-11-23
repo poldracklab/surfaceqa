@@ -4,7 +4,9 @@ import nibabel as nib
 import numpy as np
 import pytest
 
-from surfaceqa.build import build_all, build_subject, load_meta
+from PIL import Image
+
+from surfaceqa.build import BUILD_FORMAT, build_all, build_subject, load_meta
 from surfaceqa.contours import unpack_slice
 from surfaceqa.discover import find_subjects
 from tests.synth import icosphere, write_subject
@@ -98,3 +100,48 @@ def test_load_meta(built):
     ref, qa, res = built
     assert load_meta(qa, ref.key)["run"] == res.run
     assert load_meta(qa, "nope__nobody") is None
+
+
+def test_run_from_an_older_build_format_is_rebuilt(built):
+    ref, qa, res = built
+    meta_path = qa / "subjects" / ref.key / "runs" / res.run / "meta.json"
+    meta = json.loads(meta_path.read_text())
+    assert meta["format"] == BUILD_FORMAT
+    meta_path.write_text(json.dumps({**meta, "format": BUILD_FORMAT - 1}))
+    assert build_subject(ref, qa).status == "built"
+    assert json.loads(meta_path.read_text())["format"] == BUILD_FORMAT
+
+
+def test_failed_rebuild_clears_an_earlier_missing_report(tmp_path):
+    subj = write_subject(tmp_path / "src", omit=("surf/rh.pial",))
+    ref = find_subjects([subj])[0]
+    qa = tmp_path / "qa"
+    build_all([ref], qa)
+    (subj / "surf" / "rh.pial").write_bytes(b"junk")
+    assert build_all([ref], qa)[0].status == "failed"
+    assert not (qa / "subjects" / ref.key / "missing.json").exists()
+
+
+def test_anisotropic_non_lia_off_centre_subject_has_contours_on_the_anatomy(tmp_path):
+    """Checked against the slice images themselves, not the geometry code."""
+    subj = write_subject(tmp_path / "src", orientation="PIR", voxel=(1.0, 0.7, 1.3),
+                         centre=(3.0, -2.0, 2.0))
+    ref = find_subjects([subj])[0]
+    qa = tmp_path / "qa"
+    res = build_subject(ref, qa)
+    run = qa / "subjects" / ref.key / "runs" / res.run
+    for plane in ("sagittal", "coronal", "axial"):
+        index = json.loads((run / f"contours_{plane}.json").read_text())
+        blob = (run / f"contours_{plane}.bin").read_bytes()
+        counts = np.diff(index["surfaces"]["lh.pial"])
+        i = int(np.argmax(counts))  # the slice through the middle of the ball
+        pts = unpack_slice(blob, index, "lh.pial", i).reshape(-1, 2)
+        img = np.asarray(Image.open(run / "slices" / plane / f"{i:03d}.jpg")).astype(float)
+        centre = pts.mean(axis=0)
+
+        def sample(scale):
+            xy = np.round(centre + (pts - centre) * scale).astype(int)
+            return img[xy[:, 1], xy[:, 0]]
+
+        assert (sample(0.8) > 128).mean() > 0.98, plane
+        assert (sample(1.2) < 128).mean() > 0.98, plane
