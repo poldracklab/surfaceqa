@@ -294,21 +294,23 @@ def test_a_new_reviewer_gets_an_empty_review_embedded(qa_reviewed):
 def test_a_reviewer_who_has_not_submitted_does_not_get_others_ratings(qa_reviewed):
     finalize(qa_reviewed)
     for html in (_page(qa_reviewed, FIRST, "cat"), _index(qa_reviewed, "cat")):
-        assert "C+" not in html and "ann-note-xyzzy" not in html and "mark-note-plugh" not in html
-        assert "ann, bob" in html
+        # the grade itself cannot be searched for: every grade is an option of the grade menu
+        assert "bob-note-quux" not in html and '<td class="grade">C+</td>' not in html
+        assert "ann-note-xyzzy" not in html and "mark-note-plugh" not in html
+        assert "ann, bob" in html and "Other reviewers" not in html
     record = _record(qa_reviewed, FIRST, _view("cat"))
     assert record["others"] == [] and record["final"] is None and record["comparison"] is None
 
 
 def test_a_reviewer_who_has_submitted_sees_the_others(qa_reviewed):
     html = _page(qa_reviewed, FIRST, "ann")
-    assert "Other reviewers" in html and "bob" in html and "C+" in html
+    assert "Other reviewers" in html and "bob-note-quux" in html and "<td>C+ " in html
     assert "ann-note-xyzzy" in html and "mark-note-plugh" in html
 
 
 def test_without_a_name_everything_is_shown_read_only(qa_reviewed):
     html = _page(qa_reviewed, FIRST)
-    assert "ann-note-xyzzy" in html and "C+" in html and 'type="radio"' not in html
+    assert "ann-note-xyzzy" in html and "bob-note-quux" in html and 'type="radio"' not in html
     assert 'action="/reviewer"' in html
 
 
@@ -336,7 +338,10 @@ def test_blind_index_hides_scores_of_unsubmitted_subjects_and_is_shuffled_per_re
 def test_blind_without_a_name_shows_only_the_name_form(qa_reviewed):
     for html in (_index(qa_reviewed, blind=True), _page(qa_reviewed, FIRST, blind=True)):
         assert 'action="/reviewer"' in html and "Give your name" in html
-        assert "sub-01" not in html and "<canvas" not in html and "ann" not in html
+        # the header may carry the address that was asked for, to return to after naming
+        main = html.split("<main>")[1]
+        assert "sub-0" not in main and "<canvas" not in main and "ann" not in main
+        assert "<table" not in main and "review-data" not in html
 
 
 def test_final_labels_are_shown_after_finalize(qa_reviewed):

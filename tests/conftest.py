@@ -66,7 +66,9 @@ def qa_reviewed(qa_planted) -> Path:
                       marks=[{**MARK, "note": "mark-note-plugh"}])
     ann["items"]["sinus"]["note"] = "ann-note-xyzzy"
     submit_review(qa_planted, ann)
-    submit_review(qa_planted, make_review("bob", first, run, grade="C+", sinus="minor"))
+    bob = make_review("bob", first, run, grade="C+", sinus="minor")
+    bob["notes"] = "bob-note-quux"
+    submit_review(qa_planted, bob)
     draft = make_review("ann", second, current_run_dir(qa_planted, second).name, submitted=False)
     save_review(qa_planted, draft)
     return qa_planted
