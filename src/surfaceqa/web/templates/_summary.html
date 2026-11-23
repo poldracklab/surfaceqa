@@ -1,0 +1,18 @@
+<section class="summary">
+{% if subject.qa %}
+<p><strong>Suspicion score {{ subject.score }}</strong>{% if subject.rank %} · rank {{ subject.rank.rank }} of {{ subject.rank.of }} {{ subject.pipeline }} subjects{% endif %}.
+The score only orders subjects and locations for review. It is not a judgment of quality, and a low score does not mean the surfaces are correct.</p>
+{% if subject.not_run %}
+<p class="note">Not run for this subject:
+{% for i in subject.not_run %}<span class="notrun"><code>{{ i.name }}</code> ({{ i.reason }})</span>{{ "; " if not loop.last }}{% endfor %}</p>
+{% endif %}
+{% if subject.qa.region_note %}<p class="note">{{ subject.qa.region_note }}</p>{% endif %}
+{% for i in subject.qa.indicators if i.dropped %}
+<p class="note"><code>{{ i.name }}</code>: only the {{ i.n_findings }} largest findings are listed; {{ i.dropped }} smaller ones are not shown.</p>
+{% endfor %}
+{% elif subject.qa_failed %}
+<p class="warning">The automated indicators failed for this subject (see <a href="qa_error.txt">qa_error.txt</a>); the checklist below has no findings to show.</p>
+{% else %}
+<p class="note">The automated indicators have not been computed for this subject.</p>
+{% endif %}
+</section>

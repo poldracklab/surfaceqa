@@ -9,6 +9,10 @@ from urllib.parse import quote
 from jinja2 import Environment, PackageLoader, select_autoescape
 
 from surfaceqa.build import load_meta
+from surfaceqa.checklist import checklist_sections, finding_text
+from surfaceqa.qa import load_findings
+from surfaceqa.regions import REGIONS
+from surfaceqa.scoring import rank_within_pipeline
 
 VIEW_ORDER = ("coronal", "sagittal", "axial")
 NO_RUN_TEMPLATE = {"missing files": "missing.html", "build failed": "failed.html"}
@@ -49,13 +53,41 @@ def _subject_record(qa_dir: Path, folder: Path) -> dict:
     record["status"] = _status(meta, missing, (folder / "error.txt").is_file())
     version = f" {record['version']}" if record.get("version") else ""
     return {**record, "pipeline_label": f"{record['pipeline']}{version}",
-            "href": f"subjects/{quote(key)}/index.html"}
+            "href": f"subjects/{quote(key)}/index.html", **_qa_fields(qa_dir, folder)}
+
+
+def _qa_fields(qa_dir: Path, folder: Path) -> dict:
+    """What the indicators produced for the subject's current run."""
+    found = load_findings(qa_dir, folder.name)
+    if found is None:
+        return {"qa": None, "score": None, "qa_failed": (folder / "qa_error.txt").is_file()}
+    titles = {region.id: region.title for region in REGIONS}
+    top = found["findings"][0] if found["findings"] else None
+    largest = f"{finding_text(top)} · {titles[top['region']]}" if top else ""
+    return {"qa": found, "score": found["score"], "qa_failed": False, "largest": largest,
+            "not_run": [i for i in found["indicators"] if i["status"] == "not run"],
+            "sections": checklist_sections(found)}
+
+
+def _add_ranks(records: list[dict]) -> None:
+    scored = {r["key"]: (r["pipeline"], r["score"]) for r in records if r["score"] is not None}
+    ranks = rank_within_pipeline(scored)
+    for record in records:
+        record["rank"] = ranks.get(record["key"])
+
+
+def _review_order(record: dict) -> tuple:
+    """Grouped by pipeline; most suspicious first; subjects without a score last."""
+    score = record["score"]
+    return (record["pipeline"], score is None, -(score or 0.0), record["key"])
 
 
 def _subject_records(qa_dir: Path) -> list[dict]:
     root = qa_dir / "subjects"
     folders = sorted(p for p in root.iterdir() if p.is_dir()) if root.is_dir() else []
-    return [_subject_record(qa_dir, folder) for folder in folders]
+    records = [_subject_record(qa_dir, folder) for folder in folders]
+    _add_ranks(records)
+    return sorted(records, key=_review_order)
 
 
 def _copy_static(qa_dir: Path) -> None:

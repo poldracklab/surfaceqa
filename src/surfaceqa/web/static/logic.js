@@ -64,3 +64,32 @@ export function zoomAt(view, factor, px, py) {
 export function isHideKey(event) {
   return event.code === "KeyS" && !event.metaKey && !event.ctrlKey && !event.altKey;
 }
+
+// Screen coordinates of one finding's voxels that lie on a slice of a plane.
+export function findingVoxelsOnSlice(voxels, finding, plane, slice) {
+  const out = [];
+  const end = (finding.voxel_start + finding.voxel_count) * 3;
+  for (let k = finding.voxel_start * 3; k < end; k += 3) {
+    if (voxels[k + plane.axis] !== slice) continue;
+    const grid = [voxels[k], voxels[k + 1], voxels[k + 2]];
+    const {x, y} = gridToScreen(grid, plane);
+    out.push([x, y]);
+  }
+  return out;
+}
+
+// `count` slice indices evenly spaced strictly inside 0..n-1 (all of them if n is small).
+export function montageSlices(n, count) {
+  if (n <= count) return Array.from({length: n}, (_, i) => i);
+  return Array.from({length: count}, (_, i) => Math.round(((i + 1) * (n - 1)) / (count + 1)));
+}
+
+// A view centred on screen point (x, y) showing fieldMm across the smaller canvas dimension.
+export function zoomTo(viewW, viewH, plane, pixel, x, y, fieldMm) {
+  const scale = Math.min(viewW, viewH) / fieldMm;
+  return {
+    scale,
+    dx: viewW / 2 - (x + 0.5) * pixel.h * scale,
+    dy: viewH / 2 - (y + 0.5) * pixel.v * scale,
+  };
+}

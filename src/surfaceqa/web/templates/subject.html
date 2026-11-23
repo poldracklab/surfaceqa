@@ -7,11 +7,13 @@
 {% elif subject.status == "build failed" %}
 <p class="warning">The latest build of this subject failed (see <a href="error.txt">error.txt</a>). The viewer below shows the previous build, which may no longer match the data.</p>
 {% endif %}
+{% include "_summary.html" %}
 <section class="viewer" id="viewer" data-run="runs/{{ subject.run }}/" data-meta="runs/{{ subject.run }}/meta.json">
 <div class="toolbar">
 <label><input type="checkbox" id="show-surfaces" checked> Surfaces</label>
 <label><input type="checkbox" id="show-pial" checked> pial</label>
 <label><input type="checkbox" id="show-white" checked> white</label>
+<label><input type="checkbox" id="show-findings" checked> Findings</label>
 <button type="button" id="reset-view">Reset view</button>
 <span class="legend"><i class="swatch pial"></i>pial <i class="swatch lh"></i>left white <i class="swatch rh"></i>right white</span>
 </div>
@@ -27,5 +29,7 @@
 </div>
 <p class="keys">scroll or arrow keys: change slice · click: move the other two views · ctrl/cmd + scroll: zoom · drag: pan · double-click a view: enlarge / restore · hold s: hide surfaces</p>
 </section>
+{% include "_checklist.html" %}
 <script type="module" src="{{ root }}static/viewer.js"></script>
+<script type="module" src="{{ root }}static/checklist.js"></script>
 {% endblock %}

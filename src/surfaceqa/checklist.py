@@ -1,0 +1,27 @@
+"""Turn a subject's findings into the checklist sections shown on its page."""
+
+from surfaceqa.regions import REGIONS
+
+WHAT = {
+    "pial_out": "pial too far out", "gray_missed": "gray matter missed",
+    "white_short": "white surface short", "crossing": "hemispheres overlap",
+    "thickness": "thick patch", "topology": "topology defect",
+}
+
+
+def finding_text(finding: dict) -> str:
+    """For example 'pial too far out · 217 mm³' or 'thick patch · 391 vertices'."""
+    if finding["size_mm3"] is None:
+        return f"{WHAT[finding['kind']]} · {finding['n']} vertices"
+    return f"{WHAT[finding['kind']]} · {round(finding['size_mm3'])} mm³"
+
+
+def _section(region, findings: list[dict], defaults: dict) -> dict:
+    mine = [{**f, "text": finding_text(f)} for f in findings if f["region"] == region.id]
+    return {"id": region.id, "title": region.title, "look_for": region.look_for,
+            "findings": mine, "defaults": defaults.get(region.id, [])}
+
+
+def checklist_sections(found: dict) -> list[dict]:
+    """One section per region, in Kay's order; findings keep their most-points-first order."""
+    return [_section(region, found["findings"], found["defaults"]) for region in REGIONS]

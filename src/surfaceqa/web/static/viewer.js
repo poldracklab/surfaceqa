@@ -3,6 +3,7 @@ import * as L from "./logic.js";
 
 const LINE_WIDTH = 1.5;
 const PRELOAD = 3;
+const FINDING_RGB = "0, 229, 255";
 const WHEEL_STEP = 40; // wheel delta that moves one slice
 const DRAG_THRESHOLD = 3; // pixels of movement before a press becomes a pan
 
@@ -12,7 +13,10 @@ const state = {
   meta: null,
   cursor: [0, 0, 0],
   views: {},
-  show: {surfaces: true, pial: true, white: true},
+  show: {surfaces: true, pial: true, white: true, findings: true},
+  findings: [],
+  voxels: null, // Uint16Array of R, A, S triples for every finding
+  highlight: null,
   keyHide: false,
   hovered: "coronal",
 };
@@ -33,6 +37,7 @@ function makeView(panel) {
   return {
     name, panel, canvas, ctx: canvas.getContext("2d"), plane: state.meta.planes[name],
     view: {scale: 1, dx: 0, dy: 0}, contours: null, images: new Map(), wheel: 0, press: null,
+    findingSlices: new Map(), // slice -> [{id, points}] for the findings overlay
     slider: panel.querySelector(".slider"),
   };
 }
@@ -119,6 +124,32 @@ function drawContours(v, i) {
   }
 }
 
+// Findings whose voxels touch a slice of this view, computed once per slice.
+function findingsOnSlice(v, i) {
+  if (!v.findingSlices.has(i)) {
+    const hits = [];
+    for (const finding of state.findings) {
+      const points = L.findingVoxelsOnSlice(state.voxels, finding, v.plane, i);
+      if (points.length) hits.push({id: finding.id, points});
+    }
+    v.findingSlices.set(i, hits);
+  }
+  return v.findingSlices.get(i);
+}
+
+function drawFindings(v, i) {
+  if (!state.voxels || !state.show.findings || state.keyHide) return;
+  const [x0, y0] = toCanvas(v, -0.5, -0.5);
+  const [x1, y1] = toCanvas(v, 0.5, 0.5);
+  for (const hit of findingsOnSlice(v, i)) {
+    v.ctx.fillStyle = `rgba(${FINDING_RGB}, ${hit.id === state.highlight ? 0.7 : 0.35})`;
+    for (const [x, y] of hit.points) {
+      const [px, py] = toCanvas(v, x - 0.5, y - 0.5);
+      v.ctx.fillRect(px, py, x1 - x0, y1 - y0);
+    }
+  }
+}
+
 function drawCrosshairs(v) {
   const cross = L.crosshairs(state.cursor, v.plane);
   const [cx, cy] = toCanvas(v, cross.x, cross.y);
@@ -140,6 +171,7 @@ function draw(v) {
   sizeCanvas(v);
   v.ctx.clearRect(0, 0, v.canvas.clientWidth, v.canvas.clientHeight);
   drawImage(v, i);
+  drawFindings(v, i);
   drawContours(v, i);
   drawCrosshairs(v);
   v.panel.querySelector(".readout").textContent = `${v.name}  slice ${i + 1} / ${v.plane.n_slices}`;
@@ -253,7 +285,7 @@ function bindView(v) {
 }
 
 function bindToolbar() {
-  for (const key of ["surfaces", "pial", "white"]) {
+  for (const key of ["surfaces", "pial", "white", "findings"]) {
     const box = document.getElementById(`show-${key}`);
     box.addEventListener("change", () => { state.show[key] = box.checked; drawAll(); });
   }
@@ -279,6 +311,50 @@ async function loadContours(v) {
   draw(v);
 }
 
+// Findings are optional: a subject without them still gets the viewer.
+async function loadFindings() {
+  try {
+    const found = await fetch(`${runUrl}findings.json`).then((r) => (r.ok ? r.json() : null));
+    if (!found || !found.findings.length) return;
+    const buffer = await fetch(`${runUrl}findings_voxels.bin`).then((r) => r.arrayBuffer());
+    state.findings = found.findings;
+    state.voxels = new Uint16Array(buffer);
+    drawAll();
+  } catch (error) {
+    console.warn("surfaceqa: findings could not be loaded", error);
+  }
+}
+
+function goTo(grid, {zoomMm} = {}) {
+  state.cursor = grid.map((value, axis) => L.clampSlice(value, state.meta.shape[axis]));
+  for (const v of Object.values(state.views)) {
+    if (!zoomMm) continue;
+    const {x, y} = L.gridToScreen(state.cursor, v.plane);
+    v.view = L.zoomTo(v.canvas.clientWidth, v.canvas.clientHeight, v.plane, pixelSize(v.plane), x, y, zoomMm);
+  }
+  drawAll();
+  root.scrollIntoView({behavior: "smooth", block: "start"});
+}
+
+function goToSlice(planeName, slice) {
+  const v = state.views[planeName];
+  const grid = [...state.cursor];
+  grid[v.plane.axis] = slice;
+  Object.values(state.views).forEach(refit);
+  goTo(grid);
+}
+
+function setHighlight(id) {
+  state.highlight = id;
+  drawAll();
+}
+
+// What other scripts on the page (the checklist) may use.
+function publicData() {
+  const contours = Object.fromEntries(Object.values(state.views).map((v) => [v.name, v.contours]));
+  return {meta: state.meta, contours, sliceUrl};
+}
+
 function showError(error) {
   const note = document.createElement("p");
   note.className = "note";
@@ -302,6 +378,10 @@ async function start() {
   window.addEventListener("blur", () => { if (state.keyHide) setKeyHide(false); });
   drawAll();
   await Promise.all(Object.values(state.views).map(loadContours));
+  loadFindings();
+  return publicData();
 }
 
-start().catch(showError);
+const ready = start();
+window.surfaceqaViewer = {ready, goTo, goToSlice, setHighlight};
+ready.catch(showError);

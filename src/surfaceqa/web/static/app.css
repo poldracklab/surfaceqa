@@ -35,3 +35,17 @@ dd.path { overflow-wrap: anywhere; }
 @media (max-width: 900px) { .panels { grid-template-columns: 1fr; } }
 .warning { border: 1px solid #b98900; background: #2a2200; color: #ffd866; padding: 8px 12px; border-radius: 4px; max-width: 900px; }
 .slider { position: absolute; left: 150px; right: 8px; bottom: 2px; width: auto; height: 16px; margin: 0; accent-color: var(--muted); }
+h2 { font-size: 17px; margin: 22px 0 6px; }
+h3 { font-size: 15px; margin: 0 0 4px; }
+.summary p { max-width: 900px; margin: 6px 0; }
+.notrun code, .note code { color: var(--text); }
+td.num { text-align: right; font-variant-numeric: tabular-nums; }
+td.muted { color: var(--muted); }
+.checklist .item { border-top: 1px solid var(--line); padding: 12px 0; max-width: 1100px; }
+.checklist .item p { margin: 4px 0; }
+.spots { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
+.spot { background: #1d2329; color: var(--text); border: 1px solid var(--line); border-radius: 4px; padding: 4px 10px; cursor: pointer; font: inherit; font-size: 13px; }
+.spot.finding { border-color: #00a7bd; }
+.spot:hover, .spot.active { background: #26303a; }
+.montage { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 8px; }
+.montage canvas { background: #000; cursor: pointer; }
