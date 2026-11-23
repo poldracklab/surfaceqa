@@ -23,6 +23,8 @@ MISSING = {
     "hemi_ribbon": "no lh.ribbon.mgz and rh.ribbon.mgz",
 }
 NO_CORTEX = "segmentation has no cortex labels"
+ATLAS_SEG = ("the segmentation was made from an atlas (recon-all before version 8), "
+             "which labels sinus and dura as cortex")
 
 
 @dataclass
@@ -84,6 +86,8 @@ def missed_gray(data: SubjectData) -> IndicatorResult:
     name, kind = "missed_gray", "gray_missed"
     if reason := _missing(data, "ribbon", "seg"):
         return not_run(name, kind, reason)
+    if data.seg_method == "atlas":
+        return not_run(name, kind, ATLAS_SEG)
     seg_cortex = (data.seg >= 1000) | np.isin(data.seg, SEG_CORTEX)
     if not seg_cortex.any():
         return not_run(name, kind, NO_CORTEX)

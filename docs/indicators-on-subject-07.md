@@ -19,19 +19,19 @@ surface indicators). "not run" means the inputs do not exist for that pipeline.
 
 | Indicator | FastSurfer 2.6.1 | recon-all 8.2.0 | NSD FreeSurfer 6 |
 |---|---|---|---|
-| `ribbon_outside_brain` | 1 (26 mm³) | 0 | 6 (1,632 mm³) |
+| `ribbon_outside_brain` | 1 (26 mm³) | 4 (144 mm³) | 6 (1,632 mm³) |
 | `ribbon_in_nonbrain_mask` | not run | 0 | not run |
 | `ribbon_in_cerebellum` | 0 | 0 | 1 (22 mm³) |
-| `missed_gray` | 0 | not run | not run |
+| `missed_gray` | 0 | 5 (290 mm³) | not run |
 | `white_matter_in_ribbon` | 0 | 3 (96 mm³) | 40 (2,970 mm³) |
 | `bright_ribbon` | 0 | 0 | 0 |
 | `hemisphere_crossing` | 0 | 0 | 0 |
 | `thick_patches` | 6 (433 vertices) | 5 (614 vertices) | 4 (360 vertices) |
 | `topology_defects` | 2 (794 vertices) | 7 (3,196 vertices) | 13 (3,932 vertices) |
-| **Suspicion score** | **4.0** | **10.4** | **55.9** |
+| **Suspicion score** | **4.0** | **14.8** | **55.9** |
 
-These are the numbers after the noise margin was corrected (see "Changes made because of
-this"). Before the correction FastSurfer had 15 findings, recon-all 24 and NSD 74; the
+These are the numbers after the noise margin was corrected and after the comparison with
+SynthSeg was set up properly (see "Changes made because of this"). Before the correction FastSurfer had 15 findings, recon-all 24 and NSD 74; the
 difference was boundary noise.
 
 Scores are not comparable across these three: the indicators compare the surfaces with a
@@ -60,13 +60,17 @@ current ones. Findings ranked lower than 18th were not looked at.
 
 **recon-all 8.2.0**
 
+- `missed_gray` (5, 290 mm³), from close-ups of the four largest:
+  - Three are orbitofrontal (81, 29 and 27 mm³): thin strips that the segmentation calls
+    cortex just below the pial surface on the underside of the frontal lobe. This is
+    where Kay says gray matter is missed. **Plausibly real; not confirmed.**
+  - One (79 mm³) is in the gap between the occipital lobes and one (74 mm³) is under the
+    occipital lobe above the cerebellum. Both are medium-gray tissue that looks like
+    sinus and tentorium. **The segmentation is wrong here and the surface right.**
+- `ribbon_outside_brain` (4, 144 mm³): small, at the base of the brain. **Not examined.**
 - `topology_defects` (7): the largest is on the medial wall; three are inside occipital
-  and frontal gyri. All were repaired automatically. **Routine, but they were the five
-  top-ranked findings.**
-- `white_matter_in_ribbon` (3; 12 before the correction): thin strips deep in sulci where the atlas-based
-  `aseg.presurf` says white matter and the ribbon says cortex. At 1 mm the atlas labels
-  are coarser than the surfaces. **Probably the segmentation, not the surface.**
-- Nothing fired for the pial surface at all.
+  and frontal gyri. All were repaired automatically. **Routine.**
+- `white_matter_in_ribbon` (3): thin strips deep in sulci. **Probably the segmentation.**
 
 **NSD FreeSurfer 6 (manually edited)**
 
@@ -91,8 +95,8 @@ reason to look and nothing more.
 | Pial into the transverse sinus / under the occipital lobe | FastSurfer: one finding (26 mm³). recon-all: none. |
 | Cortex / cerebellum interface | NSD: one small finding (22 mm³). Others: none. He also found this region mostly fine. |
 | Inferior frontal membrane included | No. |
-| Orbitofrontal gray matter missed | No. (FastSurfer had two small `missed_gray` findings there before the margin correction; they were boundary noise.) recon-all: cannot be computed. |
-| Ear-canal dropout, gray missed | No. The one FastSurfer finding filed under inferior temporal is a thick patch, not missed gray. recon-all: cannot be computed. |
+| Orbitofrontal gray matter missed | recon-all 8.2: three `missed_gray` findings (137 mm³) on the orbital surface, plausible but not confirmed. FastSurfer: no (two small findings there before the margin correction were boundary noise). |
+| Ear-canal dropout, gray missed | No. The one FastSurfer finding filed under inferior temporal is a thick patch, not missed gray. |
 | White surface short of gyral crowns | `white_matter_in_ribbon` fires in the recon-all reconstructions, but looks like segmentation coarseness. |
 
 An earlier version of this table credited FastSurfer with catching orbitofrontal and
@@ -106,7 +110,7 @@ Two lists that matter:
 
 - `topology_defects`: routine, automatically repaired, often on the medial wall.
 - `thick_patches`: the ones examined are insula.
-- `white_matter_in_ribbon` against recon-all's atlas segmentation.
+- `white_matter_in_ribbon` against either recon-all segmentation.
 - `ribbon_outside_brain` against FreeSurfer 6's `aseg.presurf`.
 
 **Named by Kay and not caught**
@@ -118,10 +122,14 @@ Two lists that matter:
 - The inferior frontal membrane.
 - Orbitofrontal gray matter missed, and the ear-canal dropout.
 - Hemisphere crossing, because of the cluster minimum (the largest overlap cluster is 17 mm³).
-- Every pial error in recon-all output. For recon-all the only segmentation to compare
-  against is the one recon-all itself used, so agreement is close to guaranteed
-  (3 voxels of ribbon over background). The sinus and dura label files that recon-all 8.2
-  writes overlap the ribbon by 2 and 14 voxels here, below the minimum.
+- Pial into sinus or dura in recon-all 8.2 output, by any segmentation-based indicator.
+  SynthSeg, which recon-all 8.2's segmentation is copied from, labels sinus and tentorium
+  as cortex itself (two of the five `missed_gray` findings), so it would agree with a
+  surface that made the same mistake. recon-all 8.2 deals with the sinus upstream instead:
+  it segments sinus and dura (`vsinus.mgz`, `mca-dura.mgz`) and blanks them out of the
+  image before the pial surface is placed. The ribbon overlaps those files by 2 and 14
+  voxels, so `ribbon_in_nonbrain_mask` is close to checking the pipeline against itself.
+  What it cannot tell is whether the sinus segmentation itself was complete.
 - `bright_ribbon` found nothing anywhere. Its threshold lands at 94 to 102 on `norm.mgz`,
   where white matter is 110 and the ribbon's 99th percentile is 83 to 90, so it can only
   fire on tissue nearly as bright as white matter. Either that is too strict or bright
@@ -141,19 +149,55 @@ Two lists that matter:
   one). A first version of the correction rounded up, which made the margin 1.6 mm at
   0.8 mm voxels and removed the tentorial finding above; a test now requires a 2 mm error
   at 0.8 mm voxels to be found.
+- **CSF counts as outside the brain** (label 24, as well as background) in
+  `ribbon_outside_brain`.
+- **`missed_gray` runs for any network-made segmentation with cortex labels**, not only
+  FastSurfer's parcels, and is not run against atlas-made ones (recon-all before
+  version 8).
 - **No other threshold was changed.** One subject is not grounds for tuning
   `MIN_CLUSTER_MM3` or `BRIGHT_MAD`, and the misses above are mostly not threshold
   problems.
 
+## The recon-all 8.2 segmentation is SynthSeg
+
+Checked on 2026-11-23, after the first version of this document claimed otherwise.
+
+- recon-all 8.2 runs `mri_synthseg` on the T1 at the start and never runs the atlas
+  labelling step (`mri_ca_label`) that FreeSurfer 6 uses. `aseg.auto_noCCseg.mgz` is
+  identical to `synthseg.rca.mgz` voxel for voxel; `aseg.presurf.mgz` differs only by
+  the corpus callosum labels (0.3% of brain voxels).
+- So that segmentation is made independently of surface placement, like FastSurfer's. The
+  first version of this document called it atlas-based and said it agrees with the
+  surfaces by construction. Both statements were wrong for 8.2. The FreeSurfer 6
+  reconstruction is atlas-based (its log does contain `mri_ca_label`); whether its
+  segmentation and surfaces agree by construction was never established.
+- Nothing fired at first for two reasons that were the tool's, not the data's. SynthSeg
+  labels the fluid around the brain as CSF (label 24), not as background, and the
+  indicator looked only for background: 3 voxels of ribbon over background, 16,020 over
+  CSF. And `missed_gray` was switched off for any segmentation without cortical parcels.
+- Without the noise margin, ribbon over CSF is 170 clusters (6,111 mm³). Of the four
+  largest, one is the non-cortical medial wall and three are sulci that the pial surface
+  bridges instead of following. With the margin, four small findings remain.
+
+Against FreeSurfer 6's atlas segmentation the same `missed_gray` comparison gave 35
+findings (5,313 mm³) on the NSD reconstruction. The four largest are sagittal sinus, dura
+above the brain, and tissue next to the cerebellum, all labelled cortex by the atlas
+segmentation and all correctly excluded by the hand-edited surface. The indicator is
+therefore not run against atlas-made segmentations.
+
 ## What this suggests for later stages
 
-- For FastSurfer output the indicators point at plausible places. For recon-all output
-  they currently say little about the pial surface, which is where most of the errors Kay
-  describes are. The reviewer's eyes, the fixed default locations per region, and the
-  cohort thickness comparison planned for stage 5 carry more of the weight there.
-- A segmentation independent of recon-all would make the recon-all indicators
-  meaningful. Running FastSurfer's segmentation step alone on recon-all subjects is one
-  way; it is not part of the current design.
+- The indicators now say something about gray matter the surface missed, for FastSurfer
+  and for recon-all 8. On this subject that amounts to three unconfirmed orbitofrontal
+  findings.
+- No segmentation-based indicator here can be trusted for pial-into-sinus, in either
+  direction: FastSurfer's network produced one small plausible finding, SynthSeg makes the
+  error itself, and the FreeSurfer 6 atlas makes it badly. The reviewer's eyes, the fixed
+  default locations per region, and the cohort thickness comparison planned for stage 5
+  carry that error type.
+- The places where a segmentation labels sinus or dura as cortex are, incidentally, the
+  places where an unedited pial surface is most likely to go wrong. That could be turned
+  into "look here" locations; it is not built.
 - The crossing indicator should probably ignore the cluster minimum, or use a smaller
   one. Left unchanged until ratings say whether those scattered voxels matter.
 

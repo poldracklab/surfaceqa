@@ -15,6 +15,7 @@ DEFAULT_SEG_FILE = "aseg.presurf.mgz"
 NONBRAIN_FILES = {"fastsurfer": ()}
 DEFAULT_NONBRAIN_FILES = ("vsinus.mgz", "mca-dura.mgz")
 PARC_FILE = "aparc.DKTatlas+aseg.mgz"
+SYNTHSEG_FILE = "synthseg.rca.mgz"
 
 
 @dataclass
@@ -39,6 +40,7 @@ class SubjectData:
     parc: np.ndarray | None
     norm: np.ndarray | None
     hemis: dict[str, HemiSurface]
+    seg_method: str = "network"  # "network" (FastSurfer, SynthSeg) or "atlas" (older recon-all)
 
 
 def _optional(reader, *args):
@@ -94,9 +96,17 @@ def _hemi_surface(subject_dir: Path, hemi: str, pial_path: Path, tkr_to_grid) ->
     )
 
 
+def _seg_method(mri: Path, pipeline: PipelineInfo) -> str:
+    """How the segmentation was made. recon-all 8 copies its aseg from SynthSeg and keeps
+    that file; older versions label voxels from an atlas, which takes sinus and dura for cortex."""
+    if pipeline.name == "fastsurfer" or (mri / SYNTHSEG_FILE).is_file():
+        return "network"
+    return "atlas"
+
+
 def _input_files(pipeline: PipelineInfo) -> list[str]:
     """Every optional file the indicators read, relative to the subject folder."""
-    mri = ["ribbon.mgz", "lh.ribbon.mgz", "rh.ribbon.mgz", "norm.mgz", PARC_FILE,
+    mri = ["ribbon.mgz", "lh.ribbon.mgz", "rh.ribbon.mgz", "norm.mgz", PARC_FILE, SYNTHSEG_FILE,
            SEG_FILE.get(pipeline.name, DEFAULT_SEG_FILE),
            *NONBRAIN_FILES.get(pipeline.name, DEFAULT_NONBRAIN_FILES)]
     surf = [f"{hemi}.{name}" for hemi in HEMIS for name in ("thickness", "defect_labels", "orig.nofix")]
@@ -130,4 +140,4 @@ def load_subject_data(subject_dir: Path, pipeline: PipelineInfo) -> SubjectData:
         voxel_sizes=grid.voxel_sizes, ribbon=_labels(mri / "ribbon.mgz", shape),
         hemi_ribbon=_hemi_ribbon(mri, shape), seg=seg, seg_name=seg_name if seg is not None else None,
         nonbrain=nonbrain, nonbrain_names=names, parc=_labels(mri / PARC_FILE, shape),
-        norm=_volume(mri / "norm.mgz", shape), hemis=hemis)
+        norm=_volume(mri / "norm.mgz", shape), hemis=hemis, seg_method=_seg_method(mri, pipeline))
