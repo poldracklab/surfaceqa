@@ -126,3 +126,78 @@ def write_subject(root: Path, name: str = "sub-01", pipeline: str = "fastsurfer"
             nib.freesurfer.write_geometry(subj / "surf" / surf, verts, faces, volume_info=info)
     _write_logs(subj, pipeline, omit)
     return subj
+
+
+# ---- extra files read by the indicators ---------------------------------------------------
+
+SEG_NAME = {"fastsurfer": "aparc.DKTatlas+aseg.deep.mgz", "freesurfer": "aseg.presurf.mgz"}
+
+
+def _tkr_coords(img) -> np.ndarray:
+    """tkr RAS position of every voxel, shape (*volume shape, 3)."""
+    tkr = img.header.get_vox2ras_tkr()
+    idx = np.indices(img.shape).reshape(3, -1).T
+    return (idx @ tkr[:3, :3].T + tkr[:3, 3]).reshape(*img.shape, 3)
+
+
+def _tissue(coords: np.ndarray, cortex_left: int, cortex_right: int) -> np.ndarray:
+    r = np.linalg.norm(coords, axis=-1)
+    left = coords[..., 0] < 0
+    labels = np.zeros(r.shape, dtype=np.int32)
+    labels[r < 8] = np.where(left, 2, 41)[r < 8]
+    shell = (r >= 8) & (r < 10)
+    labels[shell] = np.where(left, cortex_left, cortex_right)[shell]
+    return labels
+
+
+def _plant_ribbon_blob(ribbon: np.ndarray, coords: np.ndarray, centre, radius: float) -> None:
+    blob = (np.linalg.norm(coords - np.asarray(centre), axis=-1) <= radius) & (ribbon == 0)
+    ribbon[blob] = np.where(coords[..., 0] < 0, 3, 42)[blob]
+
+
+def _save_like(img, data: np.ndarray, path: Path) -> None:
+    nib.save(nib.MGHImage(data, img.affine), path)
+
+
+def _write_label(path: Path, vertices: np.ndarray) -> None:
+    lines = ["#!ascii label, from subject synth", str(len(vertices))]
+    lines += [f"{i} {x:.3f} {y:.3f} {z:.3f} 0.0" for i, (x, y, z) in enumerate(vertices)]
+    path.write_text("\n".join(lines) + "\n")
+
+
+def _write_surface_measures(subj: Path, plant: dict) -> None:
+    (subj / "label").mkdir(exist_ok=True)
+    for hemi in ("lh", "rh"):
+        verts, _ = nib.freesurfer.read_geometry(subj / "surf" / f"{hemi}.pial")
+        thickness = np.full(len(verts), 2.0, dtype=np.float32)
+        patch = plant.get("thick_patch")
+        if patch and patch[0] == hemi:
+            thickness[np.linalg.norm(verts - np.asarray(patch[1]), axis=1) <= patch[2]] = 5.0
+        nib.freesurfer.write_morph_data(subj / "surf" / f"{hemi}.thickness", thickness)
+        _write_label(subj / "label" / f"{hemi}.cortex.label", verts)
+
+
+def write_qa_files(subj: Path, pipeline: str = "fastsurfer", plant: dict | None = None) -> None:
+    """Ribbon, segmentation, parcellation, norm, thickness and cortex labels for the synthetic ball.
+
+    plant: {"ribbon_blob": (centre tkr mm, radius mm)} adds cortex to the ribbon that the
+    segmentation does not have; {"thick_patch": (hemi, centre tkr mm, radius mm)} sets
+    thickness 5.0 on the pial vertices within the radius.
+    """
+    plant = plant or {}
+    mri = subj / "mri"
+    img = nib.load(mri / "orig.mgz")
+    coords = _tkr_coords(img)
+    ribbon = _tissue(coords, 3, 42)
+    parcels = _tissue(coords, 1028, 2028)
+    if "ribbon_blob" in plant:
+        _plant_ribbon_blob(ribbon, coords, *plant["ribbon_blob"])
+    _save_like(img, ribbon.astype(np.uint8), mri / "ribbon.mgz")
+    _save_like(img, np.isin(ribbon, (2, 3)).astype(np.uint8), mri / "lh.ribbon.mgz")
+    _save_like(img, np.isin(ribbon, (41, 42)).astype(np.uint8), mri / "rh.ribbon.mgz")
+    seg = parcels if pipeline == "fastsurfer" else _tissue(coords, 3, 42)
+    _save_like(img, seg, mri / SEG_NAME[pipeline])
+    _save_like(img, parcels, mri / "aparc.DKTatlas+aseg.mgz")
+    norm = np.select([np.isin(parcels, (2, 41)), parcels > 0], [110, 70], 0).astype(np.uint8)
+    _save_like(img, norm, mri / "norm.mgz")
+    _write_surface_measures(subj, plant)
