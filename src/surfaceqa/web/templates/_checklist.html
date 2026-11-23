@@ -1,14 +1,13 @@
-<section class="checklist" id="checklist">
 <h2>Checklist</h2>
 <article class="item">
 <h3>Bird's-eye view</h3>
 <p>Scroll through the whole brain first: two plausible hemispheres, no missing lobes, no surface jumping across a gap.</p>
-<div class="montage" data-contours="1"></div>
+<div class="spots"><button type="button" class="spot" data-montage="contours">Show all slices</button></div>
 </article>
 <article class="item">
 <h3>T1 quality</h3>
 <p>Look at the image, not the surfaces: blur, uneven intensity, banding from reslicing, defacing artifacts.</p>
-<div class="montage" data-contours="0"></div>
+<div class="spots"><button type="button" class="spot" data-montage="t1">Show all slices, T1 only</button></div>
 </article>
 {% for section in subject.sections %}
 <article class="item" data-region="{{ section.id }}">
@@ -26,4 +25,3 @@
 {% endif %}
 </article>
 {% endfor %}
-</section>

@@ -355,7 +355,7 @@ function goTo(grid, {zoomMm} = {}) {
   state.focusMm = zoomMm || null;
   if (zoomMm) Object.values(state.views).forEach((v) => focus(v, zoomMm));
   drawAll();
-  root.scrollIntoView({behavior: "smooth", block: "start"});
+  root.closest(".workspace").scrollIntoView({block: "nearest"});
 }
 
 function goToSlice(planeName, slice) {

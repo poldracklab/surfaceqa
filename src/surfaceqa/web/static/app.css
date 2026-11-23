@@ -13,26 +13,25 @@ h1 { font-size: 20px; margin: 8px 0; }
 .note, .keys { color: var(--muted); font-size: 13px; }
 table.subjects { border-collapse: collapse; }
 table.subjects th, table.subjects td { text-align: left; padding: 6px 18px 6px 0; border-bottom: 1px solid var(--line); }
-dl.facts { display: grid; grid-template-columns: max-content 1fr; gap: 2px 14px; margin: 6px 0 12px; font-size: 13px; }
+dl.facts { display: flex; flex-wrap: wrap; gap: 2px 6px; margin: 4px 0 8px; font-size: 13px; }
 dl.facts dt { color: var(--muted); }
-dl.facts dd { margin: 0; }
+dl.facts dd { margin: 0 14px 0 0; }
 dd.path { overflow-wrap: anywhere; }
 .toolbar { display: flex; flex-wrap: wrap; gap: 14px; align-items: center; margin-bottom: 8px; font-size: 13px; }
 .toolbar button { background: #1d2329; color: var(--text); border: 1px solid var(--line); border-radius: 4px; padding: 3px 10px; cursor: pointer; }
 .legend { color: var(--muted); }
 .swatch { display: inline-block; width: 14px; height: 3px; vertical-align: middle; margin: 0 4px 0 10px; }
 .swatch.pial { background: var(--pial); } .swatch.lh { background: var(--lh); } .swatch.rh { background: var(--rh); }
-.panels { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; }
-.panel { position: relative; background: var(--panel); height: 62vh; min-height: 320px; overflow: hidden; }
+.panels { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; flex: 1; min-height: 0; }
+.panel { position: relative; background: var(--panel); height: 100%; min-height: 0; overflow: hidden; }
 .panel canvas { position: absolute; inset: 0; width: 100%; height: 100%; cursor: crosshair; touch-action: none; }
 .panels.has-enlarged { grid-template-columns: 1fr; }
 .panels.has-enlarged .panel { display: none; }
-.panels.has-enlarged .panel.enlarged { display: block; height: 80vh; }
+.panels.has-enlarged .panel.enlarged { display: block; height: 100%; }
 .edge { position: absolute; color: var(--muted); font-size: 12px; pointer-events: none; }
 .edge.left { left: 6px; top: 50%; } .edge.right { right: 6px; top: 50%; }
 .edge.top { top: 4px; left: 50%; } .edge.bottom { bottom: 22px; left: 50%; }
 .readout { position: absolute; left: 6px; bottom: 4px; font-size: 12px; color: var(--muted); pointer-events: none; }
-@media (max-width: 900px) { .panels { grid-template-columns: 1fr; } }
 .warning { border: 1px solid #b98900; background: #2a2200; color: #ffd866; padding: 8px 12px; border-radius: 4px; max-width: 900px; }
 .slider { position: absolute; left: 150px; right: 8px; bottom: 2px; width: auto; height: 16px; margin: 0; accent-color: var(--muted); }
 h2 { font-size: 17px; margin: 22px 0 6px; }
@@ -41,11 +40,25 @@ h3 { font-size: 15px; margin: 0 0 4px; }
 .notrun code, .note code { color: var(--text); }
 td.num { text-align: right; font-variant-numeric: tabular-nums; }
 td.muted { color: var(--muted); }
-.checklist .item { border-top: 1px solid var(--line); padding: 12px 0; max-width: 1100px; }
-.checklist .item p { margin: 4px 0; }
 .spots { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
 .spot { background: #1d2329; color: var(--text); border: 1px solid var(--line); border-radius: 4px; padding: 4px 10px; cursor: pointer; font: inherit; font-size: 13px; }
 .spot.finding { border-color: #00a7bd; }
 .spot:hover, .spot.active { background: #26303a; }
-.montage { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 8px; }
-.montage canvas { background: #000; cursor: pointer; }
+[hidden] { display: none !important; }
+.workspace { display: grid; grid-template-columns: minmax(0, 1fr) 340px; gap: 12px; height: calc(100vh - 16px); min-height: 480px; }
+.viewer { display: flex; flex-direction: column; min-width: 0; min-height: 0; }
+.viewer .keys { margin: 6px 0 0; }
+.sidebar { overflow-y: auto; min-height: 0; border-left: 1px solid var(--line); padding: 0 6px 0 12px; }
+.sidebar h2 { margin-top: 0; }
+.sidebar .item { border-top: 1px solid var(--line); padding: 10px 0; }
+.sidebar .item p { margin: 4px 0; font-size: 13px; }
+.spot.active { border-color: #ffe100; background: #2f3a21; }
+.montage { flex: 1; min-height: 0; display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); grid-auto-rows: minmax(0, 1fr); gap: 4px; }
+.montage canvas { width: 100%; height: 100%; object-fit: contain; background: #000; cursor: pointer; }
+@media (max-width: 900px) {
+  .workspace { grid-template-columns: 1fr; height: auto; }
+  .panels { grid-template-columns: 1fr; }
+  .panel { height: 60vh; }
+  .montage { height: 80vh; }
+  .sidebar { border-left: 0; padding: 0; overflow: visible; }
+}

@@ -116,3 +116,10 @@ export function zoomTo(viewW, viewH, plane, pixel, x, y, fieldMm) {
     dy: viewH / 2 - (y + 0.5) * pixel.v * scale,
   };
 }
+
+// Next position in a list of n items; no wrapping; from "nothing selected" start at either end.
+export function stepIndex(current, delta, n) {
+  if (n === 0) return null;
+  if (current === null) return delta > 0 ? 0 : n - 1;
+  return Math.min(n - 1, Math.max(0, current + delta));
+}

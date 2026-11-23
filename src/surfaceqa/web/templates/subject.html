@@ -8,6 +8,7 @@
 <p class="warning">The latest build of this subject failed (see <a href="error.txt">error.txt</a>). The viewer below shows the previous build, which may no longer match the data.</p>
 {% endif %}
 {% include "_summary.html" %}
+<div class="workspace">
 <section class="viewer" id="viewer" data-run="runs/{{ subject.run }}/" data-meta="runs/{{ subject.run }}/meta.json">
 <div class="toolbar">
 <label><input type="checkbox" id="show-surfaces" checked> Surfaces</label>
@@ -15,6 +16,7 @@
 <label><input type="checkbox" id="show-white" checked> white</label>
 <label><input type="checkbox" id="show-findings" checked> Findings</label>
 <button type="button" id="reset-view">Reset view</button>
+<button type="button" id="back-to-views" hidden>Back to three views</button>
 <span class="legend"><i class="swatch pial"></i>pial <i class="swatch lh"></i>left white <i class="swatch rh"></i>right white</span>
 </div>
 <div class="panels">
@@ -27,9 +29,13 @@
 </div>
 {% endfor %}
 </div>
-<p class="keys">scroll or arrow keys: change slice · click: move the other two views · ctrl/cmd + scroll: zoom · drag: pan · double-click a view: enlarge / restore · hold s: hide surfaces</p>
+<div class="montage" hidden></div>
+<p class="keys">scroll or arrow keys: change slice · click: move the other two views · ctrl/cmd + scroll: zoom · drag: pan · double-click a view: enlarge / restore · hold s: hide surfaces · n / p: next / previous location</p>
 </section>
+<aside id="checklist" class="sidebar">
 {% include "_checklist.html" %}
+</aside>
+</div>
 <script type="module" src="{{ root }}static/viewer.js"></script>
 <script type="module" src="{{ root }}static/checklist.js"></script>
 {% endblock %}

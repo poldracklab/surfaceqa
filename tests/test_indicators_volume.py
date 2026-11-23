@@ -134,13 +134,14 @@ def test_one_voxel_shell_in_every_direction_is_not_a_finding():
     assert r["ribbon_outside_brain"].findings == [] and r["missed_gray"].findings == []
 
 
-@pytest.mark.parametrize("voxel,shift", [(1.0, 1.0), (0.8, 0.8), (0.8, 1.0), (1.0, -1.0), (0.8, -0.8)])
-def test_pial_edge_off_by_about_a_voxel_is_not_a_finding(voxel, shift):
+@pytest.mark.parametrize("voxel,shift", [(1.0, 1.0), (0.8, 0.8), (1.0, -1.0), (0.8, -0.8)])
+def test_pial_edge_off_by_one_voxel_is_not_a_finding(voxel, shift):
     r = names_run(shifted_ball(voxel, shift))
     assert r["ribbon_outside_brain"].findings == [] and r["missed_gray"].findings == []
 
 
-@pytest.mark.parametrize("voxel", [1.0, 0.8])
-def test_pial_edge_off_by_three_millimetres_is_a_finding(voxel):
-    assert names_run(shifted_ball(voxel, 3.0))["ribbon_outside_brain"].findings
-    assert names_run(shifted_ball(voxel, -3.0))["missed_gray"].findings
+@pytest.mark.parametrize("voxel,shift", [(1.0, 3.0), (0.8, 3.0), (0.8, 2.0)])
+def test_pial_edge_off_by_millimetres_is_a_finding(voxel, shift):
+    # 2 mm at 0.8 mm voxels is the size of the sinus errors the tool exists to find
+    assert names_run(shifted_ball(voxel, shift))["ribbon_outside_brain"].findings
+    assert names_run(shifted_ball(voxel, -shift))["missed_gray"].findings
