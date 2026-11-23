@@ -12,6 +12,8 @@ from surfaceqa.subjectdata import SubjectData
 CORTEX = (3, 42)
 WHITE = (2, 41)
 CEREBELLUM = (7, 8, 46, 47)
+NOT_BRAIN = (0, 24)  # background, and the CSF label that SynthSeg puts around the brain
+SEG_CORTEX = (3, 42)  # cortex as one class per hemisphere (aseg, SynthSeg)
 MAD_TO_SD = 1.4826
 MISSING = {
     "ribbon": "no ribbon.mgz",
@@ -20,8 +22,7 @@ MISSING = {
     "norm": "no norm.mgz",
     "hemi_ribbon": "no lh.ribbon.mgz and rh.ribbon.mgz",
 }
-NO_PARCELS = ("segmentation has no cortical parcels "
-              "(recon-all's aseg labels cortex too generously to compare)")
+NO_CORTEX = "segmentation has no cortex labels"
 
 
 @dataclass
@@ -62,7 +63,7 @@ def ribbon_outside_brain(data: SubjectData) -> IndicatorResult:
     name, kind = "ribbon_outside_brain", "pial_out"
     if reason := _missing(data, "ribbon", "seg"):
         return not_run(name, kind, reason)
-    return _result(name, kind, _cortex(data) & _deep(data.seg == 0, data), data)
+    return _result(name, kind, _cortex(data) & _deep(np.isin(data.seg, NOT_BRAIN), data), data)
 
 
 def ribbon_in_nonbrain_mask(data: SubjectData) -> IndicatorResult:
@@ -83,9 +84,9 @@ def missed_gray(data: SubjectData) -> IndicatorResult:
     name, kind = "missed_gray", "gray_missed"
     if reason := _missing(data, "ribbon", "seg"):
         return not_run(name, kind, reason)
-    seg_cortex = data.seg >= 1000
+    seg_cortex = (data.seg >= 1000) | np.isin(data.seg, SEG_CORTEX)
     if not seg_cortex.any():
-        return not_run(name, kind, NO_PARCELS)
+        return not_run(name, kind, NO_CORTEX)
     missed = farther_than(seg_cortex & (data.ribbon == 0), data.ribbon > 0,
                           thresholds.MARGIN_MM, data.voxel_sizes)
     return _result(name, kind, missed, data)

@@ -58,3 +58,14 @@ def test_truncated_optional_file_becomes_none(synth_subject, keep):
     path.write_bytes(raw[:int(len(raw) * keep)])  # e.g. recon-all still writing
     data = load_subject_data(synth_subject, detect_pipeline(synth_subject))
     assert data.ribbon is None and data.norm is not None
+
+
+def test_segmentation_method_is_recorded(synth_subject, tmp_path):
+    write_qa_files(synth_subject)
+    assert load_subject_data(synth_subject, detect_pipeline(synth_subject)).seg_method == "network"
+    old = write_subject(tmp_path / "fs6", pipeline="freesurfer")
+    write_qa_files(old, pipeline="freesurfer")
+    assert load_subject_data(old, detect_pipeline(old)).seg_method == "atlas"
+    # recon-all 8 keeps the SynthSeg output its segmentation was copied from
+    (old / "mri" / "synthseg.rca.mgz").write_bytes((old / "mri" / "aseg.presurf.mgz").read_bytes())
+    assert load_subject_data(old, detect_pipeline(old)).seg_method == "network"

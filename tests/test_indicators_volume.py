@@ -169,3 +169,13 @@ def test_pial_edge_off_by_millimetres_is_a_finding(voxel, shift):
     # 2 mm at 0.8 mm voxels is the size of the sinus errors the tool exists to find
     assert names_run(shifted_ball(voxel, shift))["ribbon_outside_brain"].findings
     assert names_run(shifted_ball(voxel, -shift))["missed_gray"].findings
+
+
+def test_missed_gray_is_not_run_against_an_atlas_made_segmentation():
+    # FreeSurfer 6's atlas segmentation labels sinus and dura as cortex: on NSD subject 07 it
+    # produced 35 "missed gray" findings where the hand-edited surface was right to stop.
+    data = generic_cortex(clean())
+    data.seg_method = "atlas"
+    data.seg[30:36, 17:23, 17:23] = 3
+    r = names_run(data)["missed_gray"]
+    assert r.status == "not run" and "atlas" in r.reason and r.findings == []
