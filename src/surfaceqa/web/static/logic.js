@@ -198,3 +198,10 @@ export function stepItem(current, delta, n) {
   if (current === null) return 0;
   return Math.min(n - 1, Math.max(0, current + delta));
 }
+
+// True when the keys pressed are text for this element. A rating button, tick box or slider
+// that was clicked keeps the focus, and the keys must go on working as shortcuts there.
+export function isTyping(target) {
+  if (target.tagName === "TEXTAREA" || target.tagName === "SELECT") return true;
+  return target.tagName === "INPUT" && !["radio", "checkbox", "range", "button"].includes(target.type);
+}

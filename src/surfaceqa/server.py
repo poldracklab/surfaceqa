@@ -7,7 +7,8 @@ from urllib.parse import parse_qs, quote
 
 from fastapi import APIRouter, FastAPI, HTTPException, Request
 from fastapi.concurrency import run_in_threadpool
-from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, RedirectResponse
+from fastapi.responses import (FileResponse, HTMLResponse, JSONResponse, PlainTextResponse,
+                               RedirectResponse)
 from fastapi.staticfiles import StaticFiles
 
 from surfaceqa.reviews import valid_reviewer
@@ -20,8 +21,14 @@ ONE_YEAR = 365 * 24 * 3600
 MAX_BODY = 1_000_000  # bytes; a review is a few kilobytes
 RUN_NAME = re.compile(r"[0-9a-f]{12}")
 GATED = ("findings.json", "findings_voxels.bin")  # hidden from a blind reviewer until they submit
+# The files of a run that the viewer asks for. Nothing else in the QA directory is served as a
+# file: not the reviews, the final labels or the exports, and not the pages `build` wrote to
+# disk, which show every reviewer's ratings. Exact spelling only, also on disks that ignore case.
+PLANE = "(coronal|sagittal|axial)"
+RUN_FILE = re.compile(rf"meta\.json|findings\.json|findings_voxels\.bin|contours_{PLANE}\.(bin|json)"
+                      rf"|slices/{PLANE}/\d{{3,4}}\.jpg")
 BAD_NAME = ("A reviewer name is 1 to 40 letters, digits, - or _ and starts with a letter or "
-            "digit; no spaces.")
+            "digit; no spaces. Capitals are stored as lower case.")
 
 router = APIRouter()
 
@@ -66,7 +73,7 @@ def _local(target: str) -> str:
 @router.post("/reviewer")
 async def set_reviewer(request: Request):
     form = parse_qs((await request.body()).decode(errors="replace"), keep_blank_values=True)
-    name = form.get("name", [""])[0].strip()
+    name = form.get("name", [""])[0].strip().lower()
     if not valid_reviewer(name):
         return HTMLResponse(f"<p>{BAD_NAME}</p><p><a href='/'>Back</a></p>", status_code=400)
     response = RedirectResponse(_local(form.get("next", ["/"])[0]), status_code=303)
@@ -111,7 +118,11 @@ def get_review(request: Request, key: str):
 
 
 async def _json_body(request: Request):
-    if int(request.headers.get("content-length") or 0) > MAX_BODY:
+    try:
+        declared = int(request.headers.get("content-length") or 0)
+    except ValueError:
+        raise HTTPException(400, "malformed content-length") from None
+    if declared > MAX_BODY:
         raise HTTPException(413, "the review is too large")
     body = await request.body()
     if len(body) > MAX_BODY:
@@ -129,7 +140,7 @@ async def _store(request: Request, key: str, submit: bool):
         return await run_in_threadpool(store_review, _qa_dir(request), record, reviewer, payload,
                                        submit)
     except Refused as refused:
-        return JSONResponse({"detail": refused.detail}, status_code=refused.status)
+        return JSONResponse(refused.body(), status_code=refused.status)
 
 
 @router.put("/api/review/{key}")
@@ -142,12 +153,21 @@ async def post_submit(request: Request, key: str):
     return await _store(request, key, submit=True)
 
 
-@router.get("/subjects/{key}/runs/{run}/{name}")
+@router.get("/subjects/{key}/error.txt")
+def build_error(request: Request, key: str):
+    record = _record(request, key)
+    path = _qa_dir(request) / "subjects" / record["key"] / "error.txt"
+    if not path.is_file():
+        raise HTTPException(404)
+    return PlainTextResponse(path.read_text(errors="replace"))
+
+
+@router.get("/subjects/{key}/runs/{run}/{name:path}")
 def run_file(request: Request, key: str, run: str, name: str):
-    """A file of a run. In blind mode the findings wait until the reviewer has submitted."""
+    """A viewer file of a run. In blind mode the findings wait until the reviewer has submitted."""
     record = _record(request, key)
     path = _qa_dir(request) / "subjects" / record["key"] / "runs" / run / name
-    if not RUN_NAME.fullmatch(run) or name in ("", ".", "..") or not path.is_file():
+    if not RUN_NAME.fullmatch(run) or not RUN_FILE.fullmatch(name) or not path.is_file():
         raise HTTPException(404)
     blind = request.app.state.blind
     if name in GATED and blind and not has_submitted(_qa_dir(request), record, _reviewer(request)):
@@ -160,5 +180,5 @@ def create_app(qa_dir: Path, blind: bool = False) -> FastAPI:
     app.state.qa_dir = Path(qa_dir)
     app.state.blind = blind
     app.include_router(router)
-    app.mount("/", StaticFiles(directory=Path(qa_dir), html=True), name="qa")
+    app.mount("/static", StaticFiles(directory=Path(qa_dir) / "static", check_dir=False), name="static")
     return app

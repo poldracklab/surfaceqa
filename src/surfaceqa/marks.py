@@ -26,5 +26,17 @@ def locate_mark(mark: dict, meta: dict) -> dict:
     return {**mark, "tkr": [round(float(v), 2) for v in tkr], "vertex": vertex}
 
 
-def locate_marks(review: dict, meta: dict) -> dict:
-    return {**review, "marks": [locate_mark(mark, meta) for mark in review["marks"]]}
+def _known(mark: dict, stored: dict | None) -> dict | None:
+    """The location already found for this mark, if it has not moved since."""
+    for old in (stored or {}).get("marks", []):
+        same = old["grid"] == mark["grid"] and old["surface"] == mark["surface"]
+        if same and old.get("tkr") and (old.get("vertex") is not None or mark["surface"] is None):
+            return {**mark, "tkr": old["tkr"], "vertex": old["vertex"]}
+    return None
+
+
+def locate_marks(review: dict, meta: dict, stored: dict | None = None) -> dict:
+    """Locate the review's marks. A mark that is unchanged since `stored` keeps the location
+    found then, so its vertex is not lost when the source volume is no longer mounted."""
+    marks = [_known(mark, stored) or locate_mark(mark, meta) for mark in review["marks"]]
+    return {**review, "marks": marks}

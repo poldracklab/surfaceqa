@@ -6,7 +6,7 @@ from surfaceqa.finalize import is_stale, load_final
 from surfaceqa.protocol import item_ids, load_protocol
 from surfaceqa.regions import REGIONS
 from surfaceqa.review_store import earlier_reviews, list_reviews, load_review
-from surfaceqa.reviews import empty_review, item_title, missing_for_submit
+from surfaceqa.reviews import RESERVED, empty_review, item_title, missing_for_submit
 
 STATE_LABEL = {"none": "not started", "draft": "draft", "skipped": "skipped",
                "submitted": "submitted"}
@@ -107,7 +107,8 @@ def review_fields(qa_dir: Path, record: dict, view) -> dict:
     submitted = [review for review in list_reviews(qa_dir, key, run) if review["submitted"]]
     mine = load_review(qa_dir, key, run, reviewer) if reviewer else None
     state = _state(mine)
-    show = state == "submitted" or (reviewer is None and not view.blind)
+    # the joint "consensus" review is written with the reviews it settles in view
+    show = state == "submitted" or reviewer == RESERVED or (reviewer is None and not view.blind)
     final = load_final(qa_dir, key) if show else None
     stale = final is not None and is_stale(final, submitted, run)
     current = final if final is not None and not stale and final["status"] != "unreviewed" else None

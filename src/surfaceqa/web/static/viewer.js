@@ -364,7 +364,7 @@ function setSurfaces(shown) {
 }
 
 function typing(event) {
-  return ["INPUT", "TEXTAREA", "SELECT"].includes(event.target.tagName) && event.target.type !== "checkbox";
+  return L.isTyping(event.target);
 }
 
 const KEY_STEPS = {ArrowUp: 1, ArrowDown: -1, ArrowRight: 1, ArrowLeft: -1, PageUp: 10, PageDown: -10};

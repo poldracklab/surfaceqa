@@ -8,7 +8,7 @@ from surfaceqa.protocol import PASS_ITEMS, item_ids, load_protocol, scale_for
 from surfaceqa.regions import REGIONS
 
 RESERVED = "consensus"  # the joint review that settles a disagreement
-NAME = re.compile(r"[A-Za-z0-9][A-Za-z0-9_-]{0,39}")
+NAME = re.compile(r"[a-z0-9][a-z0-9_-]{0,39}")  # lower case: one name, one file, on any disk
 MAX_NOTE = 2000
 MAX_MARKS = 200
 PASS_TITLES = {"birdseye": "Bird's-eye view", "t1": "T1 quality"}
@@ -115,6 +115,39 @@ def clean_review(payload: dict, key: str, run: str, reviewer: str) -> dict:
             "marks": _marks(payload.get("marks", []), protocol),
             "grade": _choice(payload.get("grade"), protocol["grades"], "grade"),
             "notes": _text(payload.get("notes"), "notes")}
+
+
+def _location(sent: dict) -> dict:
+    """Where the server found a stored mark; dropped, not trusted, when it is malformed."""
+    tkr, vertex = sent.get("tkr"), sent.get("vertex")
+    tkr_ok = isinstance(tkr, list) and len(tkr) == 3 and all(_number(v) for v in tkr)
+    vertex_ok = isinstance(vertex, int) and not isinstance(vertex, bool)
+    return {"tkr": tkr if tkr_ok else None, "vertex": vertex if vertex_ok else None}
+
+
+def _stamps_ok(raw: dict) -> bool:
+    submitted = raw.get("submitted")
+    return isinstance(raw.get("saved"), str) and (submitted is None or isinstance(submitted, str))
+
+
+def stored_review(raw) -> dict | None:
+    """A review read from disk, checked by the same rules as one from a browser.
+
+    Anything that is not a whole, valid review is None: a file someone edited or half
+    wrote must not break the pages or be counted as a rating.
+    """
+    if not isinstance(raw, dict) or not {"items", "marks"} <= set(raw) or not _stamps_ok(raw):
+        return None
+    key, run, reviewer = raw.get("key"), raw.get("run"), raw.get("reviewer")
+    if not (isinstance(key, str) and isinstance(run, str) and valid_reviewer(reviewer)):
+        return None
+    try:
+        review = clean_review(raw, key, run, reviewer)
+    except ReviewError:
+        return None
+    marks = [{**mark, **_location(sent)} for mark, sent in zip(review["marks"], raw["marks"])]
+    return {**review, "marks": marks, "protocol": raw.get("protocol"), "saved": raw["saved"],
+            "submitted": raw["submitted"], "revised": raw.get("revised") is True}
 
 
 def _unmarked_major(review: dict) -> list[str]:

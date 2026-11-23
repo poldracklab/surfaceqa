@@ -101,8 +101,10 @@ function showAll() {
 
 function payload(extra = {}) {
   const marks = review.marks.map(({region, kind, grid, surface, finding, note}) => ({region, kind, grid, surface, finding, note}));
-  return {run: review.run, items: review.items, marks, grade: review.grade, notes: review.notes,
-    unratable: review.unratable, ...extra};
+  // reviewer and saved let the server refuse a page that is out of date: opened under
+  // another name, or behind a save made in another window
+  return {run: review.run, reviewer: review.reviewer, saved: review.saved, items: review.items, marks,
+    grade: review.grade, notes: review.notes, unratable: review.unratable, ...extra};
 }
 
 function lock(message) {
@@ -127,7 +129,8 @@ async function saveNow(extra = {}) {
   try {
     const {status, result} = await send("PUT", `/api/review/${encodeURIComponent(key)}`, payload(extra));
     if (status === 409) { lock(result.detail); return false; }
-    if (status !== 200) { showStatus(`Not saved: ${detailText(result.detail)}`, true); return false; }
+    if (status !== 200) { state.dirty = true; showStatus(`Not saved: ${detailText(result.detail)}`, true); return false; }
+    review.saved = result.review.saved;
     showStatus(`Saved ${new Date().toLocaleTimeString([], {hour: "2-digit", minute: "2-digit"})}`);
     return true;
   } catch (error) {
@@ -161,9 +164,16 @@ function showMissing(lines) {
 async function submit() {
   await queueSave();
   if (state.locked) return;
-  const {status, result} = await send("POST", `/api/review/${encodeURIComponent(key)}/submit`, payload());
+  let answer;
+  try {
+    answer = await send("POST", `/api/review/${encodeURIComponent(key)}/submit`, payload());
+  } catch (error) {
+    return showStatus(`Not submitted: the server could not be reached (${error.message})`, true);
+  }
+  const {status, result} = answer;
   if (status === 200) return window.location.reload();
   if (status === 409) return lock(result.detail);
+  if (result.saved) review.saved = result.saved; // the draft was stored even though it is incomplete
   if (Array.isArray(result.detail)) { showStatus("Not submitted yet:", true); return showMissing(result.detail); }
   showStatus(`Not submitted: ${detailText(result.detail)}`, true);
 }
@@ -245,8 +255,7 @@ function bindMarks() {
 // ---- keys ----
 
 function typing(event) {
-  const tag = event.target.tagName;
-  return tag === "TEXTAREA" || tag === "SELECT" || (tag === "INPUT" && !["radio", "checkbox"].includes(event.target.type));
+  return L.isTyping(event.target);
 }
 
 function onKey(event) {

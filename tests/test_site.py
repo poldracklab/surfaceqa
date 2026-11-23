@@ -3,6 +3,8 @@ import json
 import re
 import shutil
 
+import pytest
+
 from surfaceqa.build import build_all
 from surfaceqa.discover import find_subjects
 from surfaceqa.site import write_site

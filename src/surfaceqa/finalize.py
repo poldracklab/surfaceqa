@@ -5,7 +5,7 @@ from pathlib import Path
 
 from surfaceqa.consensus import combine
 from surfaceqa.layout import current_run_dir, read_json
-from surfaceqa.protocol import load_protocol
+from surfaceqa.protocol import item_ids, load_protocol
 from surfaceqa.review_store import list_reviews
 from surfaceqa.reviews import item_title
 
@@ -29,9 +29,26 @@ def finalize(qa_dir: Path) -> list[dict]:
     return records
 
 
+SHAPE = {"key": str, "run": str, "status": str, "reviewers": list, "inputs": dict,
+         "unratable": bool, "items": dict, "grade": dict, "marks": list, "needs_fix": list,
+         "disagreements": list}
+
+
+def _usable(final) -> bool:
+    """A file with the whole shape of a final record; anything else is ignored."""
+    if not isinstance(final, dict):
+        return False
+    if not all(isinstance(final.get(name), kind) for name, kind in SHAPE.items()):
+        return False
+    items = [final["items"].get(item) for item in item_ids()]
+    whole = all(isinstance(entry, dict) and {"final", "ratings", "disagree"} <= set(entry)
+                for entry in items)
+    return whole and {"final", "grades", "disagree"} <= set(final["grade"])
+
+
 def load_final(qa_dir: Path, key: str) -> dict | None:
     final = read_json(Path(qa_dir) / "final" / f"{key}.json")
-    return final if isinstance(final, dict) and "status" in final else None
+    return final if _usable(final) else None
 
 
 def is_stale(final: dict, reviews: list[dict], run: str) -> bool:

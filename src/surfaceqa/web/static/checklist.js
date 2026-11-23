@@ -20,7 +20,7 @@ function select(viewer, index) {
 }
 
 function typing(event) {
-  return ["INPUT", "TEXTAREA", "SELECT"].includes(event.target.tagName) && event.target.type !== "checkbox";
+  return L.isTyping(event.target);
 }
 
 function bindSpots(viewer) {

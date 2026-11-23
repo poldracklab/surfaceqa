@@ -281,7 +281,23 @@ def test_oversized_body_is_refused(qa_planted):
 LEAKS = ["/ratings/{key}/{run}/ann.json", "/ratings/{key}/{run}/bob.json", "/final/{key}.json",
          "/export/ratings.tsv", "/export/marks.tsv", "/ratings/", "/final/", "/current.json",
          "//subjects/{key}/index.html", "/subjects/{key}//index.html",
-         "/subjects/{key}/./index.html", "//index.html", "/subjects/{key}/current.json"]
+         "/subjects/{key}/current.json"]
+# the test client rewrites these to an ordinary page address before sending, so they are
+# answered by the page for that reviewer; what matters is that nothing of the others is in it
+REWRITTEN = ["/subjects/{key}/./index.html", "//index.html"]
+
+
+@pytest.mark.parametrize("path", REWRITTEN)
+@pytest.mark.parametrize("blind", [False, True])
+def test_addresses_the_client_rewrites_show_only_the_reviewers_own_page(qa_reviewed, path, blind):
+    from surfaceqa.finalize import finalize
+    from surfaceqa.site import write_site
+
+    finalize(qa_reviewed)
+    write_site(qa_reviewed)
+    text = _client(qa_reviewed, "cat", blind=blind).get(path.format(key=FIRST)).text
+    assert "bob-note-quux" not in text and "ann-note-xyzzy" not in text
+    assert '<td class="grade">C+</td>' not in text
 
 
 @pytest.mark.parametrize("path", LEAKS)

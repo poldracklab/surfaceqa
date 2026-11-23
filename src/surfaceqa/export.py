@@ -29,8 +29,8 @@ def _yes(flag) -> str:
 
 def _write(path: Path, header: list[str], rows: list[dict]) -> Path:
     with open(path, "w", newline="") as handle:
-        writer = csv.writer(handle, delimiter="\t", lineterminator="\n", quoting=csv.QUOTE_NONE,
-                            quotechar=None)
+        # quoted where needed, the way spreadsheet, pandas and R readers expect by default
+        writer = csv.writer(handle, delimiter="\t", lineterminator="\n")
         writer.writerow(header)
         writer.writerows([_cell(row.get(column)) for column in header] for row in rows)
     return path
