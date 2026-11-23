@@ -28,3 +28,7 @@ def load_display_volume(path: Path) -> DisplayVolume:
 
 def to_grid(vertices_tkr: np.ndarray, tkr_to_grid: np.ndarray) -> np.ndarray:
     return vertices_tkr @ tkr_to_grid[:3, :3].T + tkr_to_grid[:3, 3]
+
+
+def to_tkr(points_grid: np.ndarray, grid_to_tkr: np.ndarray) -> np.ndarray:
+    return points_grid @ grid_to_tkr[:3, :3].T + grid_to_tkr[:3, 3]

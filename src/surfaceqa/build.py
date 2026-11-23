@@ -10,6 +10,7 @@ from functools import partial
 from pathlib import Path
 
 import nibabel as nib
+import numpy as np
 
 from surfaceqa.contours import SURFACE_ORDER, pack_plane, plane_segments
 from surfaceqa.discover import SubjectRef
@@ -23,7 +24,7 @@ from surfaceqa.qa import write_findings
 from surfaceqa.slices import intensity_window, write_plane_slices
 from surfaceqa.subjectdata import input_signature, load_subject_data
 
-BUILD_FORMAT = 2  # raise when the contents of a run folder change, so old runs are re-rendered
+BUILD_FORMAT = 3  # raise when the contents of a run folder change, so old runs are re-rendered
 COLORS = {"lh.pial": "#ffe100", "rh.pial": "#ffe100", "lh.white": "#2b6cff", "rh.white": "#ff3b30"}
 
 
@@ -91,6 +92,7 @@ def _run_meta(ref, pipeline, run: str, volume: DisplayVolume, window) -> dict:
         **_identity(ref, pipeline), "run": run, "format": BUILD_FORMAT,
         "built": datetime.now(timezone.utc).isoformat(timespec="seconds"),
         "shape": shape, "voxel_sizes": list(volume.voxel_sizes), "window": list(window),
+        "grid_to_tkr": np.linalg.inv(volume.tkr_to_grid).tolist(),
         "planes": {name: _plane_meta(plane, shape) for name, plane in PLANES.items()},
         "surfaces": {name: {"color": COLORS[name]} for name in SURFACE_ORDER},
     }
