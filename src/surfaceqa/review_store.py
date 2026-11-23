@@ -5,6 +5,8 @@ import os
 from datetime import datetime, timezone
 from pathlib import Path
 
+REQUIRED = {"key", "run", "reviewer", "saved", "submitted", "items", "marks", "grade"}
+
 
 def _subject_folder(qa_dir: Path, key: str) -> Path:
     return Path(qa_dir) / "ratings" / key
@@ -19,7 +21,14 @@ def _read(path: Path) -> dict | None:
         review = json.loads(path.read_text())
     except (OSError, ValueError):
         return None
-    return review if isinstance(review, dict) and "items" in review else None
+    return review if _usable(review) else None
+
+
+def _usable(review) -> bool:
+    """A file with the shape of a review; anything else is ignored, never trusted."""
+    if not isinstance(review, dict) or not REQUIRED <= set(review):
+        return False
+    return isinstance(review["items"], dict) and isinstance(review["marks"], list)
 
 
 def load_review(qa_dir: Path, key: str, run: str, reviewer: str) -> dict | None:

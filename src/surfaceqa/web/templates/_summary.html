@@ -1,5 +1,7 @@
 <section class="summary">
-{% if subject.qa %}
+{% if subject.hide_indicators %}
+<p class="note">Indicator results are hidden until you submit your review (blind mode).</p>
+{% elif subject.qa %}
 {% if subject.score is not none %}
 <p><strong>Suspicion score {{ subject.score }}</strong>{% if subject.rank %} · rank {{ subject.rank.rank }} of {{ subject.rank.of }} in {{ subject.source }}{% endif %}.
 The score only orders subjects and locations for review. It is not a judgment of quality, and a low score does not mean the surfaces are correct.</p>

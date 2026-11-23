@@ -1,0 +1,9 @@
+{% if view.serving %}
+<span class="who">
+{% if view.reviewer %}
+<form method="post" action="/reviewer/clear">Reviewer: <strong>{{ view.reviewer }}</strong> <button type="submit">change</button></form>
+{% else %}
+<form method="post" action="/reviewer"><label>Your name <input name="name" required maxlength="40" pattern="[A-Za-z0-9][A-Za-z0-9_\-]{0,39}" title="Letters, digits, - and _; no spaces"></label><input type="hidden" name="next" value="{{ here }}"> <button type="submit">Start reviewing</button></form>
+{% endif %}
+</span>
+{% endif %}

@@ -1,14 +1,17 @@
 {% extends "base.html" %}
 {% block main %}
 <h1>Subjects</h1>
-<p class="note">Subjects are ordered by suspicion score within each source folder; scores from different pipelines, versions or resolutions are not comparable. No subject has been reviewed yet. The score only orders the work; it does not mean a subject is good or bad. "ready" means the report was rendered, not that the surfaces are good.</p>
+<p class="note">Subjects are ordered by suspicion score within each source folder; scores from different pipelines, versions or resolutions are not comparable. The score only orders the work; it does not mean a subject is good or bad. "ready" means the report was rendered, not that the surfaces are good. A subject is reviewed only when a name is listed under "Reviewed by".</p>
+{% if reviewing %}<p><a href="/next">Next subject to review</a></p>{% endif %}
 <table class="subjects">
-<thead><tr><th>Subject</th><th>Source</th><th>Pipeline</th><th>Status</th><th>Score</th><th>Rank</th><th>Findings</th><th>Largest</th><th>Indicators</th></tr></thead>
+<thead><tr><th>Subject</th><th>Source</th><th>Pipeline</th><th>Status</th><th>Score</th><th>Rank</th><th>Findings</th><th>Largest</th><th>Indicators</th><th>Reviewed by</th>{% if reviewing %}<th>Your review</th>{% endif %}<th>Final grade</th><th>Needs fix</th></tr></thead>
 <tbody>
 {% for s in subjects %}
 <tr><td><a href="{{ s.href }}">{{ s.name }}</a></td><td>{{ s.source }}</td><td>{{ s.pipeline_label }}</td><td class="status">{{ s.status }}</td>
-{%- if s.score is not none %}<td class="num">{{ s.score }}</td><td class="num">{{ s.rank.rank }} of {{ s.rank.of }}</td><td class="num">{{ s.n_findings }}</td><td>{{ s.largest }}</td><td class="muted">{% if s.not_run %}{{ s.not_run | length }} of {{ s.n_indicators }} not run{% else %}all run{% endif %}</td>
-{%- else %}<td colspan="5" class="muted">not computed</td>{% endif %}</tr>
+{%- if s.hide_indicators %}<td colspan="5" class="muted">hidden until you submit</td>
+{%- elif s.score is not none %}<td class="num">{{ s.score }}</td><td class="num">{{ s.rank.rank }} of {{ s.rank.of }}</td><td class="num">{{ s.n_findings }}</td><td>{{ s.largest }}</td><td class="muted">{% if s.not_run %}{{ s.not_run | length }} of {{ s.n_indicators }} not run{% else %}all run{% endif %}</td>
+{%- else %}<td colspan="5" class="muted">not computed</td>{% endif %}
+<td>{{ s.reviewers | join(", ") }}</td>{% if reviewing %}<td>{{ s.mine_label }}</td>{% endif %}<td class="grade">{{ s.final_cell }}</td><td class="num fix">{{ s.needs_fix_n if s.needs_fix_n is not none }}</td></tr>
 {% endfor %}
 </tbody>
 </table>
