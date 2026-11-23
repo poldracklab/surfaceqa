@@ -11,8 +11,7 @@ from jinja2 import Environment, PackageLoader, select_autoescape
 from surfaceqa.build import load_meta
 
 VIEW_ORDER = ("coronal", "sagittal", "axial")
-STATUS_TEMPLATE = {"ready": "subject.html", "missing files": "missing.html",
-                   "build failed": "failed.html"}
+NO_RUN_TEMPLATE = {"missing files": "missing.html", "build failed": "failed.html"}
 
 
 def _environment() -> Environment:
@@ -33,16 +32,21 @@ def _fallback_info(key: str) -> dict:
             "version": None}
 
 
+def _status(meta: dict | None, missing: dict | None, failed: bool) -> str:
+    """The state of the latest build; an earlier good run does not make a subject ready."""
+    if missing is not None:
+        return "missing files"
+    if failed or meta is None:
+        return "build failed"
+    return "ready"
+
+
 def _subject_record(qa_dir: Path, folder: Path) -> dict:
     key = folder.name
     meta = load_meta(qa_dir, key)
     missing = _read_json(folder / "missing.json")
-    if meta is not None:
-        record = {**meta, "status": "ready"}
-    elif missing is not None:
-        record = {**missing, "status": "missing files"}
-    else:
-        record = {**_fallback_info(key), "status": "build failed"}
+    record = {**_fallback_info(key), **(meta or {}), **(missing or {}), "has_run": meta is not None}
+    record["status"] = _status(meta, missing, (folder / "error.txt").is_file())
     version = f" {record['version']}" if record.get("version") else ""
     return {**record, "pipeline_label": f"{record['pipeline']}{version}",
             "href": f"subjects/{quote(key)}/index.html"}
@@ -61,7 +65,8 @@ def _copy_static(qa_dir: Path) -> None:
 
 
 def _write_subject_page(env: Environment, qa_dir: Path, record: dict) -> None:
-    template = env.get_template(STATUS_TEMPLATE[record["status"]])
+    name = "subject.html" if record["has_run"] else NO_RUN_TEMPLATE[record["status"]]
+    template = env.get_template(name)
     html = template.render(subject=record, views=VIEW_ORDER, root="../../")
     (qa_dir / "subjects" / record["key"] / "index.html").write_text(html)
 

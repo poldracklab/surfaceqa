@@ -19,6 +19,7 @@ from surfaceqa.pipelines import PipelineInfo, SubjectFiles, detect_pipeline, sub
 from surfaceqa.planes import PLANES, Plane
 from surfaceqa.slices import intensity_window, write_plane_slices
 
+BUILD_FORMAT = 1  # raise when the contents of a run folder change, so old runs are re-rendered
 COLORS = {"lh.pial": "#ffe100", "rh.pial": "#ffe100", "lh.white": "#2b6cff", "rh.white": "#ff3b30"}
 
 
@@ -87,7 +88,7 @@ def _plane_meta(plane: Plane, shape) -> dict:
 def _run_meta(ref, pipeline, run: str, volume: DisplayVolume, window) -> dict:
     shape = [int(n) for n in volume.data.shape]
     return {
-        **_identity(ref, pipeline), "run": run,
+        **_identity(ref, pipeline), "run": run, "format": BUILD_FORMAT,
         "built": datetime.now(timezone.utc).isoformat(timespec="seconds"),
         "shape": shape, "voxel_sizes": list(volume.voxel_sizes), "window": list(window),
         "planes": {name: _plane_meta(plane, shape) for name, plane in PLANES.items()},
@@ -105,6 +106,14 @@ def _render_run(ref, pipeline, files: SubjectFiles, run: str, run_dir: Path) -> 
     _write_json(run_dir / "meta.json", _run_meta(ref, pipeline, run, volume, window))  # last
 
 
+def _is_current(run_dir: Path) -> bool:
+    """A finished run folder written by this version of the build."""
+    try:
+        return json.loads((run_dir / "meta.json").read_text()).get("format") == BUILD_FORMAT
+    except (OSError, ValueError):
+        return False
+
+
 def build_subject(ref: SubjectRef, qa_dir: Path) -> BuildResult:
     folder = subject_dir(qa_dir, ref.key)
     folder.mkdir(parents=True, exist_ok=True)
@@ -113,7 +122,7 @@ def build_subject(ref: SubjectRef, qa_dir: Path) -> BuildResult:
         return _report_missing(ref, pipeline, files, folder)
     run = surface_fingerprint(files.surfaces)
     run_dir = folder / "runs" / run
-    status = "unchanged" if (run_dir / "meta.json").is_file() else "built"
+    status = "unchanged" if _is_current(run_dir) else "built"
     if status == "built":
         _render_run(ref, pipeline, files, run, run_dir)
     _clear_stale(folder)
@@ -127,6 +136,7 @@ def _safe_build(qa_dir: Path, ref: SubjectRef) -> BuildResult:
     except Exception:
         folder = subject_dir(qa_dir, ref.key)
         folder.mkdir(parents=True, exist_ok=True)
+        _clear_stale(folder)
         (folder / "error.txt").write_text(traceback.format_exc())
         return BuildResult(ref.key, "failed")
 

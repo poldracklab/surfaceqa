@@ -33,6 +33,7 @@ function makeView(panel) {
   return {
     name, panel, canvas, ctx: canvas.getContext("2d"), plane: state.meta.planes[name],
     view: {scale: 1, dx: 0, dy: 0}, contours: null, images: new Map(), wheel: 0, press: null,
+    slider: panel.querySelector(".slider"),
   };
 }
 
@@ -142,6 +143,7 @@ function draw(v) {
   drawContours(v, i);
   drawCrosshairs(v);
   v.panel.querySelector(".readout").textContent = `${v.name}  slice ${i + 1} / ${v.plane.n_slices}`;
+  v.slider.value = i;
   preload(v, i);
 }
 
@@ -219,20 +221,23 @@ const KEY_STEPS = {ArrowUp: 1, ArrowDown: -1, ArrowRight: 1, ArrowLeft: -1, Page
 
 function onKeyDown(event) {
   if (typing(event)) return;
-  if (event.key === "s" && !state.keyHide) {
-    state.keyHide = true;
-    drawAll();
+  if (L.isHideKey(event)) {
+    if (!state.keyHide) setKeyHide(true);
   } else if (event.key in KEY_STEPS) {
     event.preventDefault();
     step(state.views[state.hovered], KEY_STEPS[event.key]);
   }
 }
 
+function setKeyHide(hidden) {
+  state.keyHide = hidden;
+  drawAll();
+}
+
+// Released by the S key coming up with any modifiers, or by the window losing focus,
+// so the surfaces can never stay hidden while their boxes are ticked.
 function onKeyUp(event) {
-  if (event.key === "s") {
-    state.keyHide = false;
-    drawAll();
-  }
+  if (event.code === "KeyS" && state.keyHide) setKeyHide(false);
 }
 
 function bindView(v) {
@@ -242,6 +247,8 @@ function bindView(v) {
   v.canvas.addEventListener("pointerup", (e) => onPointerUp(v, e));
   v.canvas.addEventListener("pointercancel", () => { v.press = null; });
   v.canvas.addEventListener("dblclick", () => toggleEnlarge(v));
+  v.slider.max = v.plane.n_slices - 1;
+  v.slider.addEventListener("input", () => step(v, Number(v.slider.value) - state.cursor[v.plane.axis]));
   new ResizeObserver(() => { refit(v); draw(v); }).observe(v.canvas);
 }
 
@@ -292,6 +299,7 @@ async function start() {
   bindToolbar();
   window.addEventListener("keydown", onKeyDown);
   window.addEventListener("keyup", onKeyUp);
+  window.addEventListener("blur", () => { if (state.keyHide) setKeyHide(false); });
   drawAll();
   await Promise.all(Object.values(state.views).map(loadContours));
 }

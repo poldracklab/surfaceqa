@@ -58,28 +58,38 @@ def _subdivide(verts: np.ndarray, faces: np.ndarray) -> tuple[np.ndarray, np.nda
     return np.array(verts), np.array(new_faces)
 
 
-def _affine(shape, voxel: float, orientation: str, cras) -> np.ndarray:
+def _voxel_sizes(voxel) -> np.ndarray:
+    return np.broadcast_to(np.asarray(voxel, dtype=float), (3,)).copy()
+
+
+def _affine(shape, voxel, orientation: str, cras) -> np.ndarray:
     affine = np.eye(4)
-    affine[:3, :3] = np.array([DIRECTIONS[c] for c in orientation], dtype=float).T * voxel
+    affine[:3, :3] = np.array([DIRECTIONS[c] for c in orientation], dtype=float).T * _voxel_sizes(voxel)
     affine[:3, 3] = np.asarray(cras) - affine[:3, :3] @ (np.asarray(shape) / 2)
     return affine
 
 
-def _sphere_volume(shape, affine: np.ndarray, cras) -> np.ndarray:
+def _sphere_volume(shape, affine: np.ndarray, centre) -> np.ndarray:
+    """A ball at `centre` in tkr RAS, the space FreeSurfer surfaces are written in.
+
+    FreeSurfer defines tkr RAS from the voxel grid alone (as if the volume were
+    coronal, LIA), so for other orientations it is not scanner RAS minus c_ras.
+    """
+    tkr = nib.MGHImage(np.zeros(shape, dtype=np.uint8), affine).header.get_vox2ras_tkr()
     idx = np.indices(shape).reshape(3, -1).T
-    mm = idx @ affine[:3, :3].T + affine[:3, 3] - np.asarray(cras)
+    mm = idx @ tkr[:3, :3].T + tkr[:3, 3] - np.asarray(centre)
     inside = np.linalg.norm(mm, axis=1) <= 10.0
     return (inside * 110).astype(np.uint8).reshape(shape)
 
 
-def _volume_info(shape, voxel: float, affine: np.ndarray, cras) -> dict:
-    mdc = affine[:3, :3] / voxel
+def _volume_info(shape, voxel, affine: np.ndarray, cras) -> dict:
+    mdc = affine[:3, :3] / _voxel_sizes(voxel)
     return {
         "head": np.array([2, 0, 20], dtype=np.int32),
         "valid": "1  # volume info valid",
         "filename": "../mri/orig.mgz",
         "volume": np.array(shape),
-        "voxelsize": np.array([voxel] * 3),
+        "voxelsize": _voxel_sizes(voxel),
         "xras": mdc[:, 0], "yras": mdc[:, 1], "zras": mdc[:, 2],
         "cras": np.asarray(cras, dtype=float),
     }
@@ -98,18 +108,21 @@ def _write_logs(subj: Path, pipeline: str, omit) -> None:
 
 
 def write_subject(root: Path, name: str = "sub-01", pipeline: str = "fastsurfer",
-                  shape=(32, 40, 48), voxel: float = 1.0, orientation: str = "LIA",
-                  cras=(0.0, 0.0, 0.0), omit: tuple[str, ...] = ()) -> Path:
+                  shape=(32, 40, 48), voxel=1.0, orientation: str = "LIA",
+                  cras=(0.0, 0.0, 0.0), omit: tuple[str, ...] = (),
+                  centre=(0.0, 0.0, 0.0)) -> Path:
+    """`voxel` is one size or three (file axis order); `centre` is the ball's tkr RAS position."""
     subj = Path(root) / name
     for sub in ("mri", "surf", "scripts"):
         (subj / sub).mkdir(parents=True, exist_ok=True)
     affine = _affine(shape, voxel, orientation, cras)
     if "mri/orig.mgz" not in omit:
-        nib.save(nib.MGHImage(_sphere_volume(shape, affine, cras), affine), subj / "mri" / "orig.mgz")
+        nib.save(nib.MGHImage(_sphere_volume(shape, affine, centre), affine), subj / "mri" / "orig.mgz")
     info = _volume_info(shape, voxel, affine, cras)
     for surf, radius in SURFACES.items():
         if f"surf/{surf}" not in omit:
             verts, faces = icosphere(radius)
+            verts = verts + np.asarray(centre)
             nib.freesurfer.write_geometry(subj / "surf" / surf, verts, faces, volume_info=info)
     _write_logs(subj, pipeline, omit)
     return subj

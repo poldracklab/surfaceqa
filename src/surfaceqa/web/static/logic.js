@@ -59,3 +59,8 @@ export function zoomAt(view, factor, px, py) {
   const ratio = scale / view.scale;
   return {scale, dx: px - (px - view.dx) * ratio, dy: py - (py - view.dy) * ratio};
 }
+
+// The "hold to hide surfaces" key: the physical S key, not cmd/ctrl/alt + S.
+export function isHideKey(event) {
+  return event.code === "KeyS" && !event.metaKey && !event.ctrlKey && !event.altKey;
+}

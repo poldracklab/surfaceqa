@@ -2,6 +2,11 @@
 {% block title %}{{ subject.name }} · surfaceqa{% endblock %}
 {% block main %}
 {% include "_header.html" %}
+{% if subject.status == "missing files" %}
+<p class="warning">The latest build of this subject could not be rendered because files are missing ({{ subject.missing | join(", ") }}). The viewer below shows the previous build, which may no longer match the data.</p>
+{% elif subject.status == "build failed" %}
+<p class="warning">The latest build of this subject failed (see <a href="error.txt">error.txt</a>). The viewer below shows the previous build, which may no longer match the data.</p>
+{% endif %}
 <section class="viewer" id="viewer" data-run="runs/{{ subject.run }}/" data-meta="runs/{{ subject.run }}/meta.json">
 <div class="toolbar">
 <label><input type="checkbox" id="show-surfaces" checked> Surfaces</label>
@@ -16,6 +21,7 @@
 <canvas></canvas>
 <span class="edge left"></span><span class="edge right"></span><span class="edge top"></span><span class="edge bottom"></span>
 <div class="readout"></div>
+<input type="range" class="slider" min="0" max="0" value="0" step="1" aria-label="{{ plane }} slice">
 </div>
 {% endfor %}
 </div>

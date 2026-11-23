@@ -79,4 +79,4 @@ def test_subject_names_are_escaped_on_the_subject_page(tmp_path):
     qa = tmp_path / "qa"
     build_all(find_subjects([subj]), qa)
     write_site(qa)
-    assert "<b>x" not in (qa / "subjects" / "fastsurfer__sub-<b>x" / "index.html").read_text()
+    assert "<b>x" not in (qa / "subjects" / "src__sub-<b>x" / "index.html").read_text()

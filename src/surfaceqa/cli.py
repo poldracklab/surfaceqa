@@ -5,7 +5,7 @@ import sys
 from pathlib import Path
 
 from surfaceqa.build import BuildResult, build_all
-from surfaceqa.discover import find_subjects
+from surfaceqa.discover import find_subjects, source_root
 from surfaceqa.site import write_site
 
 USAGE_ERROR = 2
@@ -49,10 +49,14 @@ def _build(args: argparse.Namespace) -> int:
     absent = [str(s) for s in sources if not s.is_dir()]
     if absent:
         return _fail(f"not a folder: {', '.join(absent)}")
-    out = (args.out or sources[0].parent / "surfaceqa").resolve()
-    if _inside(out, sources):
+    roots = [source_root(source) for source in sources]
+    out = (args.out or roots[0].parent / "surfaceqa").resolve()
+    if _inside(out, roots):
         return _fail(f"--out {out} is inside a source folder; nothing is written into the input data")
-    refs = find_subjects(sources, args.subjects)
+    try:
+        refs = find_subjects(sources, args.subjects)
+    except ValueError as error:
+        return _fail(str(error))
     if not refs:
         return _fail("no subjects found (a subject is a folder containing mri/ and surf/)")
     results = build_all(refs, out, jobs=args.jobs)
