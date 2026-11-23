@@ -3,6 +3,7 @@ import * as L from "./logic.js";
 
 const LINE_WIDTH = 1.5;
 const PRELOAD = 3;
+const BRAIN_PAD = 0.04; // free space around the brain, as a fraction of its size
 const FINDING_RGB = "0, 229, 255";
 const HINT_RGB = "255, 170, 0"; // places to look, which are not counted as findings
 const WHEEL_STEP = 40; // wheel delta that moves one slice
@@ -19,6 +20,7 @@ const state = {
   voxels: null, // Uint16Array of R, A, S triples for every finding
   highlight: null,
   layout: "three",
+  wholeImage: false,
   focusMm: null,
   keyHide: false,
   hovered: "coronal",
@@ -45,11 +47,15 @@ function makeView(panel) {
   };
 }
 
+// Fit the view to the brain (the box around its surfaces) so it fills the panel, or to the
+// whole image when asked (the T1 pass looks at the face and skull too) or when there are
+// no surfaces yet.
 function refit(v) {
   const size = pixelSize(v.plane);
-  v.view = L.fit(v.canvas.clientWidth, v.canvas.clientHeight,
-    v.plane.width * size.h, v.plane.height * size.v);
-  v.size = [v.canvas.clientWidth, v.canvas.clientHeight];
+  const [w, h] = [v.canvas.clientWidth, v.canvas.clientHeight];
+  const brain = !state.wholeImage && v.bounds ? L.fitBox(w, h, size, v.bounds, BRAIN_PAD) : null;
+  v.view = brain || L.fit(w, h, v.plane.width * size.h, v.plane.height * size.v);
+  v.size = [w, h];
 }
 
 // The canvas changed size (window resize, enlarge): keep the zoom and what is at the centre.
@@ -257,12 +263,15 @@ function onPointerUp(v, event) {
 }
 
 // Show all three views ("three") or one large view of a single plane.
-// With `fit`, the views start from a fitted, unzoomed image.
-function setLayout(layout, {fit = false} = {}) {
+// With `fit`, the views start again fitted to the brain, or to the whole image.
+function setLayout(layout, {fit = false, wholeImage = false} = {}) {
   const visible = L.visiblePlanes(layout);
   const single = visible.length === 1;
   state.layout = single ? visible[0] : "three";
-  if (fit) state.focusMm = null;
+  if (fit) {
+    state.focusMm = null;
+    state.wholeImage = wholeImage;
+  }
   for (const v of Object.values(state.views)) {
     if (fit) v.size = [0, 0]; // refit when the new size is known
     v.panel.classList.toggle("enlarged", single && v.name === visible[0]);
@@ -272,6 +281,15 @@ function setLayout(layout, {fit = false} = {}) {
     button.classList.toggle("active", button.dataset.layout === state.layout);
   }
   if (single) state.hovered = visible[0];
+  if (fit) requestAnimationFrame(refitVisible); // the panel may not change size, so no resize event
+}
+
+function refitVisible() {
+  for (const v of Object.values(state.views)) {
+    if (v.canvas.clientWidth === 0) continue;
+    refit(v);
+    draw(v);
+  }
 }
 
 function toggleEnlarge(v) {
@@ -334,6 +352,7 @@ function bindToolbar() {
   document.getElementById("reset-view").addEventListener("click", () => {
     state.cursor = L.initialCursor(state.meta.shape);
     state.focusMm = null;
+    state.wholeImage = false;
     Object.values(state.views).forEach(refit);
     drawAll();
   });
@@ -351,6 +370,8 @@ async function loadContours(v) {
     fetch(`${runUrl}contours_${v.name}.bin`).then((r) => r.arrayBuffer()),
   ]);
   v.contours = {index, buffer};
+  v.bounds = L.contourBounds(buffer, index);
+  refit(v); // now that the brain's extent is known
   draw(v);
 }
 

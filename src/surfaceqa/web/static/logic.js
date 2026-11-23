@@ -108,3 +108,34 @@ const PLANE_NAMES = ["coronal", "sagittal", "axial"];
 export function visiblePlanes(layout) {
   return PLANE_NAMES.includes(layout) ? [layout] : [...PLANE_NAMES];
 }
+
+// The box, in screen pixels, around every contour of a plane (all surfaces, all slices),
+// or null when there are none.
+export function contourBounds(buffer, index) {
+  const raw = new Uint16Array(buffer);
+  if (raw.length === 0) return null;
+  let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+  for (let k = 0; k < raw.length; k += 2) {
+    const x = raw[k], y = raw[k + 1];
+    if (x < x0) x0 = x;
+    if (x > x1) x1 = x;
+    if (y < y0) y0 = y;
+    if (y > y1) y1 = y;
+  }
+  const toPixel = (value) => value / index.quant - 0.5;
+  return {x0: toPixel(x0), y0: toPixel(y0), x1: toPixel(x1), y1: toPixel(y1)};
+}
+
+// A view that fills the canvas with a box of image pixels, leaving `pad` (a fraction of
+// the box) free on every side. Null for a canvas with no size.
+export function fitBox(viewW, viewH, pixel, box, pad) {
+  if (viewW <= 0 || viewH <= 0) return null;
+  const width = (box.x1 - box.x0 + 1) * pixel.h * (1 + 2 * pad);
+  const height = (box.y1 - box.y0 + 1) * pixel.v * (1 + 2 * pad);
+  const scale = Math.min(viewW / width, viewH / height);
+  return {
+    scale,
+    dx: viewW / 2 - ((box.x0 + box.x1) / 2 + 0.5) * pixel.h * scale,
+    dy: viewH / 2 - ((box.y0 + box.y1) / 2 + 0.5) * pixel.v * scale,
+  };
+}

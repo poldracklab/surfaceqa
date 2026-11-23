@@ -41,8 +41,9 @@ function bindScrollPasses(viewer) {
       sidebar.querySelectorAll("[data-scroll]").forEach((b) => b.classList.toggle("active", b === button));
       current = null;
       viewer.setHighlight(null);
-      viewer.setSurfaces(button.dataset.scroll === "contours");
-      viewer.setLayout("coronal", {fit: true});
+      const withSurfaces = button.dataset.scroll === "contours";
+      viewer.setSurfaces(withSurfaces);
+      viewer.setLayout("coronal", {fit: true, wholeImage: !withSurfaces});
     });
   }
 }
