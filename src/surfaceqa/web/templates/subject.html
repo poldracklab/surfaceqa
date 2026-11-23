@@ -1,0 +1,25 @@
+{% extends "base.html" %}
+{% block title %}{{ subject.name }} · surfaceqa{% endblock %}
+{% block main %}
+{% include "_header.html" %}
+<section class="viewer" id="viewer" data-run="runs/{{ subject.run }}/" data-meta="runs/{{ subject.run }}/meta.json">
+<div class="toolbar">
+<label><input type="checkbox" id="show-surfaces" checked> Surfaces</label>
+<label><input type="checkbox" id="show-pial" checked> pial</label>
+<label><input type="checkbox" id="show-white" checked> white</label>
+<button type="button" id="reset-view">Reset view</button>
+<span class="legend"><i class="swatch pial"></i>pial <i class="swatch lh"></i>left white <i class="swatch rh"></i>right white</span>
+</div>
+<div class="panels">
+{% for plane in views %}
+<div class="panel" data-plane="{{ plane }}">
+<canvas></canvas>
+<span class="edge left"></span><span class="edge right"></span><span class="edge top"></span><span class="edge bottom"></span>
+<div class="readout"></div>
+</div>
+{% endfor %}
+</div>
+<p class="keys">scroll or arrow keys: change slice · click: move the other two views · ctrl/cmd + scroll: zoom · drag: pan · double-click a view: enlarge / restore · hold s: hide surfaces</p>
+</section>
+<script type="module" src="{{ root }}static/viewer.js"></script>
+{% endblock %}

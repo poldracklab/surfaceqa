@@ -1,0 +1,6 @@
+{% extends "base.html" %}
+{% block title %}{{ subject.name }} · surfaceqa{% endblock %}
+{% block main %}
+{% include "_header.html" %}
+<p>The build of this subject failed. The error is recorded in <a href="error.txt">error.txt</a>.</p>
+{% endblock %}
