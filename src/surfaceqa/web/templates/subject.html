@@ -16,7 +16,12 @@
 <label><input type="checkbox" id="show-white" checked> white</label>
 <label><input type="checkbox" id="show-findings" checked> Findings</label>
 <button type="button" id="reset-view">Reset view</button>
-<button type="button" id="back-to-views" hidden>Back to three views</button>
+<span class="layouts" role="group" aria-label="Views shown">
+<button type="button" class="layout active" data-layout="three">Three views</button>
+<button type="button" class="layout" data-layout="coronal">Coronal</button>
+<button type="button" class="layout" data-layout="sagittal">Sagittal</button>
+<button type="button" class="layout" data-layout="axial">Axial</button>
+</span>
 <span class="legend"><i class="swatch pial"></i>pial <i class="swatch lh"></i>left white <i class="swatch rh"></i>right white</span>
 </div>
 <div class="panels">
@@ -29,7 +34,6 @@
 </div>
 {% endfor %}
 </div>
-<div class="montage" hidden></div>
 <p class="keys">scroll or arrow keys: change slice · click: move the other two views · ctrl/cmd + scroll: zoom · drag: pan · double-click a view: enlarge / restore · hold s: hide surfaces · n / p: next / previous location</p>
 </section>
 <aside id="checklist" class="sidebar">

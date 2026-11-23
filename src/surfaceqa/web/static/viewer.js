@@ -17,6 +17,8 @@ const state = {
   findings: [],
   voxels: null, // Uint16Array of R, A, S triples for every finding
   highlight: null,
+  layout: "three",
+  focusMm: null,
   keyHide: false,
   hovered: "coronal",
 };
@@ -252,12 +254,32 @@ function onPointerUp(v, event) {
   drawAll();
 }
 
+// Show all three views ("three") or one large view of a single plane.
+// With `fit`, the views start from a fitted, unzoomed image.
+function setLayout(layout, {fit = false} = {}) {
+  const visible = L.visiblePlanes(layout);
+  const single = visible.length === 1;
+  state.layout = single ? visible[0] : "three";
+  if (fit) state.focusMm = null;
+  for (const v of Object.values(state.views)) {
+    if (fit) v.size = [0, 0]; // refit when the new size is known
+    v.panel.classList.toggle("enlarged", single && v.name === visible[0]);
+  }
+  root.querySelector(".panels").classList.toggle("has-enlarged", single);
+  for (const button of root.querySelectorAll(".layout")) {
+    button.classList.toggle("active", button.dataset.layout === state.layout);
+  }
+  if (single) state.hovered = visible[0];
+}
+
 function toggleEnlarge(v) {
-  const panels = root.querySelector(".panels");
-  const enlarging = !v.panel.classList.contains("enlarged");
-  Object.values(state.views).forEach((o) => o.panel.classList.remove("enlarged"));
-  v.panel.classList.toggle("enlarged", enlarging);
-  panels.classList.toggle("has-enlarged", enlarging);
+  setLayout(state.layout === v.name ? "three" : v.name);
+}
+
+function setSurfaces(shown) {
+  state.show.surfaces = shown;
+  document.getElementById("show-surfaces").checked = shown;
+  drawAll();
 }
 
 function typing(event) {
@@ -303,6 +325,9 @@ function bindToolbar() {
   for (const key of ["surfaces", "pial", "white", "findings"]) {
     const box = document.getElementById(`show-${key}`);
     box.addEventListener("change", () => { state.show[key] = box.checked; drawAll(); });
+  }
+  for (const button of root.querySelectorAll(".layout")) {
+    button.addEventListener("click", () => setLayout(button.dataset.layout));
   }
   document.getElementById("reset-view").addEventListener("click", () => {
     state.cursor = L.initialCursor(state.meta.shape);
@@ -405,5 +430,5 @@ async function start() {
 }
 
 const ready = start();
-window.surfaceqaViewer = {ready, goTo, goToSlice, setHighlight};
+window.surfaceqaViewer = {ready, goTo, goToSlice, setHighlight, setLayout, setSurfaces};
 ready.catch(showError);

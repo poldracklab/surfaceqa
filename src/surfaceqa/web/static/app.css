@@ -53,12 +53,14 @@ td.muted { color: var(--muted); }
 .sidebar .item { border-top: 1px solid var(--line); padding: 10px 0; }
 .sidebar .item p { margin: 4px 0; font-size: 13px; }
 .spot.active { border-color: #ffe100; background: #2f3a21; }
-.montage { flex: 1; min-height: 0; display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); grid-auto-rows: minmax(0, 1fr); gap: 4px; }
-.montage canvas { width: 100%; height: 100%; object-fit: contain; background: #000; cursor: pointer; }
 @media (max-width: 900px) {
   .workspace { grid-template-columns: 1fr; height: auto; }
   .panels { grid-template-columns: 1fr; }
   .panel { height: 60vh; }
-  .montage { height: 80vh; }
   .sidebar { border-left: 0; padding: 0; overflow: visible; }
 }
+.layouts { display: inline-flex; }
+.layouts .layout { border-radius: 0; margin-left: -1px; }
+.layouts .layout:first-child { border-radius: 4px 0 0 4px; margin-left: 0; }
+.layouts .layout:last-child { border-radius: 0 4px 4px 0; }
+.layouts .layout.active { background: #2f3a21; border-color: #ffe100; position: relative; }

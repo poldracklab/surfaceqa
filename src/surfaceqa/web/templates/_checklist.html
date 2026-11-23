@@ -2,12 +2,12 @@
 <article class="item">
 <h3>Bird's-eye view</h3>
 <p>Scroll through the whole brain first: two plausible hemispheres, no missing lobes, no surface jumping across a gap.</p>
-<div class="spots"><button type="button" class="spot" data-montage="contours">Show all slices</button></div>
+<div class="spots"><button type="button" class="spot" data-scroll="contours">Scroll through all slices</button></div>
 </article>
 <article class="item">
 <h3>T1 quality</h3>
 <p>Look at the image, not the surfaces: blur, uneven intensity, banding from reslicing, defacing artifacts.</p>
-<div class="spots"><button type="button" class="spot" data-montage="t1">Show all slices, T1 only</button></div>
+<div class="spots"><button type="button" class="spot" data-scroll="t1">Scroll through all slices, T1 only</button></div>
 </article>
 {% for section in subject.sections %}
 <article class="item" data-region="{{ section.id }}">
