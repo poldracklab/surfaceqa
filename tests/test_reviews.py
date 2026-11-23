@@ -2,7 +2,7 @@ import pytest
 
 from surfaceqa.protocol import item_ids
 from surfaceqa.reviews import (ReviewError, clean_review, empty_review, missing_for_submit,
-                               valid_reviewer)
+                               stored_review, valid_reviewer)
 
 KEY, RUN, WHO = "fastsurfer__sub-01", "abc123abc123", "ann"
 MARK = {"region": "sinus", "kind": "pial_out", "grid": [10.5, 20.0, 30.25],
@@ -20,12 +20,12 @@ def complete(**fields) -> dict:
     return payload(items=items, grade="B", **fields)
 
 
-@pytest.mark.parametrize("name", ["russ", "r-2_b", "consensus", "A" * 40])
+@pytest.mark.parametrize("name", ["russ", "r-2_b", "consensus", "a" * 40, "9lives"])
 def test_valid_reviewer_accepts_plain_names(name):
     assert valid_reviewer(name)
 
 
-@pytest.mark.parametrize("name", ["", "a/b", "..", "a b", "é", "A" * 41, "-a", "a.b", "a\n"])
+@pytest.mark.parametrize("name", ["", "a/b", "..", "a b", "é", "a" * 41, "-a", "a.b", "a\n", "Ann", "CONSENSUS"])
 def test_valid_reviewer_refuses_paths_and_odd_names(name):
     assert not valid_reviewer(name)
 
@@ -137,3 +137,45 @@ def test_unratable_with_a_reason_can_be_submitted_with_nothing_rated():
 
 def test_blank_unratable_reason_does_not_count():
     assert len(missing_for_submit(payload(unratable="  "))) == 12
+
+
+# ---- reviews read back from disk -------------------------------------------------------------
+
+def _on_disk(**fields) -> dict:
+    return {**complete(marks=[{**MARK, "tkr": [1.0, 2.0, 3.0], "vertex": 7}]),
+            "saved": "2026-11-23T12:00:00+00:00", "submitted": "2026-11-23T12:00:00+00:00",
+            **fields}
+
+
+def test_a_stored_review_is_read_back_whole():
+    review = stored_review(_on_disk(revised=True))
+    assert review["marks"][0]["vertex"] == 7 and review["marks"][0]["tkr"] == [1.0, 2.0, 3.0]
+    assert review["submitted"] == "2026-11-23T12:00:00+00:00" and review["revised"] is True
+    assert review["items"]["sinus"]["rating"] == "none" and review["reviewer"] == WHO
+
+
+@pytest.mark.parametrize("fields", [
+    {"items": {"sinus": "major"}}, {"items": {"sinus": {"rating": ["major"]}}},
+    {"items": {"sinus": {"rating": "terrible"}}}, {"marks": ["x"]}, {"marks": [{}]},
+    {"reviewer": 7}, {"reviewer": "a/b"}, {"grade": "Z"}, {"run": None}, {"key": 3},
+    {"submitted": True}, {"saved": None}, {"saved": 5}, {"notes": 4}, {"unratable": ["x"]},
+])
+def test_a_stored_review_of_the_wrong_shape_is_not_a_review(fields):
+    assert stored_review(_on_disk(**fields)) is None
+
+
+@pytest.mark.parametrize("raw", [None, [], "text", 3, {}, {"items": {}}])
+def test_things_that_are_not_reviews_are_not_reviews(raw):
+    assert stored_review(raw) is None
+
+
+def test_a_stored_review_missing_an_item_reads_as_unrated_there():
+    raw = _on_disk()
+    del raw["items"]["sinus"]
+    assert stored_review(raw)["items"]["sinus"] == {"rating": None, "note": ""}
+
+
+def test_a_stored_mark_with_a_bad_location_keeps_the_mark_without_it():
+    raw = _on_disk(marks=[{**MARK, "tkr": "here", "vertex": "seven"}])
+    mark = stored_review(raw)["marks"][0]
+    assert mark["tkr"] is None and mark["vertex"] is None and mark["region"] == "sinus"

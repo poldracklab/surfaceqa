@@ -422,3 +422,55 @@ def test_keys_line_mentions_rating_keys(qa_reviewed):
     html = _page(qa_reviewed, FIRST, "cat")
     assert "1 2 3: rate" in html and "?: all keys" in html
     assert "1 2 3: rate" not in _page(qa_reviewed, FIRST)
+
+
+WRONG_REVIEWS = ['{"items": {"sinus": "major"}}', '{"marks": ["x"]}', '{"marks": [{}]}',
+                 '{"reviewer": 7}', '{"items": {}, "grade": "Z"}',
+                 '{"items": {"sinus": {"rating": "terrible"}}}', '{"submitted": true}']
+
+
+@pytest.mark.parametrize("wrong", WRONG_REVIEWS)
+def test_a_review_file_of_the_wrong_shape_is_ignored_everywhere(qa_reviewed, wrong):
+    from surfaceqa.export import export_tables
+
+    run = current_run_dir(qa_reviewed, FIRST).name
+    good = json.loads(review_path(qa_reviewed, FIRST, run, "bob").read_text())
+    for name, target_run in (("eve", run), ("ann", "0123456789ab")):
+        path = review_path(qa_reviewed, FIRST, target_run, name)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(json.dumps({**good, "reviewer": name, "run": target_run, **json.loads(wrong)}))
+    assert "ann, bob" in _row(_index(qa_reviewed), FIRST)
+    assert "eve" not in _index(qa_reviewed)
+    assert "Reviewed by ann, bob" in _page(qa_reviewed, FIRST, "ann")
+    assert [r["status"] for r in finalize(qa_reviewed) if r["key"] == FIRST] == ["agreed"]
+    write_site(qa_reviewed)
+    export_tables(qa_reviewed)
+    assert "eve" not in (qa_reviewed / "export" / "ratings.tsv").read_text()
+
+
+WRONG_FINALS = ['{"status": "agreed"}', '{"grade": "B"}', '{"items": null}', '{"run": null}',
+                '{"inputs": 3}', '{"items": {"sinus": {}}}', '{"needs_fix": 4}', '[1]', '"x"']
+
+
+@pytest.mark.parametrize("wrong", WRONG_FINALS)
+def test_a_final_file_of_the_wrong_shape_is_ignored_everywhere(qa_reviewed, wrong):
+    from surfaceqa.export import export_tables
+
+    finalize(qa_reviewed)
+    path = qa_reviewed / "final" / f"{FIRST}.json"
+    patch = json.loads(wrong)
+    whole = json.loads(path.read_text())
+    path.write_text(json.dumps({**whole, **patch} if isinstance(patch, dict) and len(patch) > 0
+                               and wrong != '{"status": "agreed"}' else patch))
+    row = _row(_index(qa_reviewed), FIRST)
+    assert "ann, bob" in row and '<td class="grade"></td>' in row
+    assert "Reviewed by ann, bob" in _page(qa_reviewed, FIRST)
+    write_site(qa_reviewed)
+    export_tables(qa_reviewed)
+    assert FIRST not in (qa_reviewed / "export" / "final.tsv").read_text()
+
+
+def test_the_consensus_reviewer_sees_the_reviews_being_settled(qa_reviewed):
+    html = _page(qa_reviewed, FIRST, "consensus")
+    assert "Submitted reviews" in html and "bob-note-quux" in html and "ann-note-xyzzy" in html
+    assert html.count('type="radio"') == 33

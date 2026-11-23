@@ -37,8 +37,28 @@ from tests.reviewing import make_review
 FIRST, SECOND, RECON = "fastsurfer__sub-01", "fastsurfer__sub-02", "freesurfer-8.2.0__sub-01"
 
 
+class ReviewClient(TestClient):
+    """Sends reviews the way the page does: with the reviewer the page was opened as and
+    the time of the save it last saw, unless the test gives them itself."""
+
+    def _as_the_page_would(self, url: str, body):
+        if not isinstance(body, dict) or "reviewer" in body:
+            return body
+        seen = self.get(url.removesuffix("/submit"))
+        if seen.status_code != 200:
+            return body
+        review = seen.json()["review"]
+        return {"reviewer": review["reviewer"], "saved": review["saved"], **body}
+
+    def put(self, url, json=None, **kwargs):
+        return super().put(url, json=self._as_the_page_would(url, json), **kwargs)
+
+    def post(self, url, json=None, **kwargs):
+        return super().post(url, json=self._as_the_page_would(url, json), **kwargs)
+
+
 def _client(qa, reviewer=None, blind=False) -> TestClient:
-    client = TestClient(create_app(qa, blind=blind), follow_redirects=False)
+    client = ReviewClient(create_app(qa, blind=blind), follow_redirects=False)
     if reviewer:
         client.cookies.set("surfaceqa_reviewer", reviewer)
     return client
@@ -66,6 +86,13 @@ def test_clearing_the_name_removes_the_cookie(qa_planted):
     response = client.post("/reviewer/clear")
     assert response.status_code == 303 and response.headers["location"] == "/"
     assert 'surfaceqa_reviewer=""' in response.headers["set-cookie"]
+
+
+def test_a_name_is_stored_in_lower_case(qa_planted):
+    # on a case-insensitive disk Ann and ann would otherwise share one file
+    response = _client(qa_planted).post("/reviewer", data={"name": "Ann", "next": "/"})
+    assert "surfaceqa_reviewer=ann" in response.headers["set-cookie"]
+    assert _client(qa_planted, "Ann").get(f"/api/review/{FIRST}").status_code == 401
 
 
 @pytest.mark.parametrize("name", ["a/b", "..", "", "a b"])
@@ -247,3 +274,199 @@ def test_oversized_body_is_refused(qa_planted):
     response = _client(qa_planted, "cat").put(f"/api/review/{FIRST}", json=payload)
     assert response.status_code == 413
     assert not (qa_planted / "ratings").exists()
+
+
+# ---- found by the review of the branch -------------------------------------------------------
+
+LEAKS = ["/ratings/{key}/{run}/ann.json", "/ratings/{key}/{run}/bob.json", "/final/{key}.json",
+         "/export/ratings.tsv", "/export/marks.tsv", "/ratings/", "/final/", "/current.json",
+         "//subjects/{key}/index.html", "/subjects/{key}//index.html",
+         "/subjects/{key}/./index.html", "//index.html", "/subjects/{key}/current.json"]
+
+
+@pytest.mark.parametrize("path", LEAKS)
+@pytest.mark.parametrize("blind", [False, True])
+def test_reviews_finals_exports_and_static_pages_are_not_served_as_files(qa_reviewed, path, blind):
+    from surfaceqa.export import export_tables
+    from surfaceqa.finalize import finalize
+    from surfaceqa.site import write_site
+
+    finalize(qa_reviewed)
+    export_tables(qa_reviewed)
+    write_site(qa_reviewed)
+    url = path.format(key=FIRST, run=current_run_dir(qa_reviewed, FIRST).name)
+    for reviewer in ("cat", None):
+        response = _client(qa_reviewed, reviewer, blind=blind).get(url)
+        assert response.status_code in (400, 404), url
+        assert "bob-note-quux" not in response.text and "ann-note-xyzzy" not in response.text
+
+
+@pytest.mark.parametrize("path", ["/index.html/", "/subjects/{key}/index.html/"])
+def test_a_trailing_slash_never_reaches_the_pages_written_to_disk(qa_reviewed, path):
+    from surfaceqa.site import write_site
+
+    write_site(qa_reviewed)
+    client = TestClient(create_app(qa_reviewed), follow_redirects=True)
+    client.cookies.set("surfaceqa_reviewer", "cat")
+    assert "bob-note-quux" not in client.get(path.format(key=FIRST)).text
+
+
+VARIANTS = ["{base}/{name}/", "{base}//{name}", "/{base}/{name}", "{base}/./{name}",
+            "{base}/x/../{name}", "{base}/{upper}", "{base}/slices/../{name}",
+            "{base}/%2e/{name}", "{base}/{name}%00"]
+
+
+@pytest.mark.parametrize("variant", VARIANTS)
+@pytest.mark.parametrize("name", ["findings.json", "findings_voxels.bin"])
+def test_blind_findings_are_not_served_under_any_spelling_of_the_address(qa_reviewed, variant, name):
+    run = current_run_dir(qa_reviewed, FIRST).name
+    url = variant.format(base=f"/subjects/{FIRST}/runs/{run}", name=name, upper=name.upper())
+    for reviewer in ("cat", None):
+        response = TestClient(create_app(qa_reviewed, blind=True), follow_redirects=True)
+        if reviewer:
+            response.cookies.set("surfaceqa_reviewer", reviewer)
+        assert response.get(url).status_code in (400, 404), url
+
+
+def test_only_the_viewer_files_of_a_run_are_served(qa_reviewed):
+    run = current_run_dir(qa_reviewed, FIRST).name
+    base = f"/subjects/{FIRST}/runs/{run}"
+    client = _client(qa_reviewed, "cat")
+    for name in ("meta.json", "findings.json", "findings_voxels.bin", "contours_axial.json",
+                 "contours_sagittal.bin", "slices/axial/000.jpg"):
+        assert client.get(f"{base}/{name}").status_code == 200, name
+    (qa_reviewed / "subjects" / FIRST / "runs" / run / "notes.txt").write_text("private")
+    for name in ("notes.txt", "slices/", "slices/axial/", "META.JSON", "slices/axial/000.JPG"):
+        assert client.get(f"{base}/{name}").status_code == 404, name
+    assert client.get(f"/subjects/{FIRST}/runs/zzzzzzzzzzzz/meta.json").status_code == 404
+    assert client.get("/static/app.css").status_code == 200
+
+
+def test_the_error_of_a_failed_build_can_be_read(qa):
+    (qa / "subjects" / "fastsurfer__sub-02" / "error.txt").write_text("Traceback: boom")
+    assert "boom" in _client(qa).get("/subjects/fastsurfer__sub-02/error.txt").text
+    assert _client(qa).get("/subjects/fastsurfer__sub-01/error.txt").status_code == 404
+
+
+def test_a_page_opened_under_another_name_cannot_save(qa_reviewed):
+    """Shared machine: a page opened as ann, then the name changed to bob in another tab."""
+    before = load_review(qa_reviewed, FIRST, current_run_dir(qa_reviewed, FIRST).name, "bob")
+    payload = {**_payload(qa_reviewed, FIRST, sinus="major"), "reviewer": "ann", "saved": None}
+    client = _client(qa_reviewed, "bob")
+    for response in (client.put(f"/api/review/{FIRST}", json=payload),
+                     client.post(f"/api/review/{FIRST}/submit", json=payload)):
+        assert response.status_code == 409 and "ann" in response.json()["detail"]
+    assert load_review(qa_reviewed, FIRST, before["run"], "bob") == before
+
+
+def test_a_payload_without_the_reviewer_is_refused(qa_planted):
+    response = TestClient(create_app(qa_planted))
+    response.cookies.set("surfaceqa_reviewer", "cat")
+    assert response.put(f"/api/review/{FIRST}", json=_payload(qa_planted, FIRST)).status_code == 409
+    assert not (qa_planted / "ratings").exists()
+
+
+def test_a_stale_window_cannot_overwrite_a_newer_save(qa_planted):
+    client = _client(qa_planted, "cat")
+    stale = {**_payload(qa_planted, FIRST, sinus="minor"), "reviewer": "cat", "saved": None}
+    assert client.put(f"/api/review/{FIRST}", json=stale).status_code == 200
+    client.put(f"/api/review/{FIRST}", json=_payload(qa_planted, FIRST, sinus="major",
+               marks=[{"region": "sinus", "kind": "pial_out", "grid": [32.0, 32.0, 40.0],
+                       "surface": None, "finding": None, "note": ""}]))
+    response = client.put(f"/api/review/{FIRST}", json=stale)  # the first window, unaware
+    assert response.status_code == 409 and "another window" in response.json()["detail"]
+    assert client.get(f"/api/review/{FIRST}").json()["review"]["items"]["sinus"]["rating"] == "major"
+
+
+def test_each_response_carries_the_stamp_for_the_next_save(qa_planted):
+    client = TestClient(create_app(qa_planted))
+    client.cookies.set("surfaceqa_reviewer", "cat")
+    payload = {**_payload(qa_planted, FIRST), "reviewer": "cat", "saved": None}
+    first = client.put(f"/api/review/{FIRST}", json=payload).json()["review"]
+    second = client.put(f"/api/review/{FIRST}", json={**payload, "saved": first["saved"]})
+    assert second.status_code == 200
+    third = client.post(f"/api/review/{FIRST}/submit",
+                        json={**payload, "saved": second.json()["review"]["saved"]})
+    assert third.status_code == 200 and third.json()["review"]["submitted"]
+
+
+@pytest.mark.parametrize("change", ["grade", "item", "mark"])
+def test_a_submitted_review_cannot_be_saved_incomplete(qa_reviewed, change):
+    run = current_run_dir(qa_reviewed, FIRST).name
+    before = load_review(qa_reviewed, FIRST, run, "ann")
+    payload = {k: before[k] for k in ("run", "items", "marks", "grade", "notes", "unratable")}
+    if change == "grade":
+        payload["grade"] = None
+    elif change == "item":
+        payload["items"] = {**payload["items"], "t1": {"rating": None, "note": ""}}
+    else:
+        payload["marks"] = []
+    response = _client(qa_reviewed, "ann").put(f"/api/review/{FIRST}", json=payload)
+    assert response.status_code == 422 and "submitted" in str(response.json()["detail"])
+    assert load_review(qa_reviewed, FIRST, run, "ann") == before
+
+
+def test_a_submitted_review_can_still_be_revised_when_complete(qa_reviewed):
+    run = current_run_dir(qa_reviewed, FIRST).name
+    before = load_review(qa_reviewed, FIRST, run, "ann")
+    payload = {k: before[k] for k in ("run", "items", "marks", "grade", "notes", "unratable")}
+    response = _client(qa_reviewed, "ann").put(f"/api/review/{FIRST}", json={**payload, "grade": "D"})
+    review = response.json()["review"]
+    assert response.status_code == 200 and review["grade"] == "D"
+    assert review["submitted"] == before["submitted"] and review["revised"] is True
+
+
+def test_a_submit_is_one_write_and_a_refused_submit_leaves_a_draft(qa_planted, monkeypatch):
+    from surfaceqa import review_store
+
+    writes = []
+    real = review_store._write
+    monkeypatch.setattr(review_store, "_write", lambda path, review: writes.append(path) or real(path, review))
+    client = _client(qa_planted, "cat")
+    assert client.post(f"/api/review/{FIRST}/submit", json=_payload(qa_planted, FIRST)).status_code == 200
+    assert len(writes) == 1
+
+
+def test_a_mark_keeps_its_vertex_when_the_source_becomes_unreadable(qa_planted):
+    import shutil
+
+    client = _client(qa_planted, "cat")
+    payload = _payload(qa_planted, FIRST)
+    payload["marks"] = [{"region": "sinus", "kind": "pial_out", "grid": [32.0, 32.0, 40.0],
+                         "surface": "lh.pial", "finding": None, "note": ""}]
+    first = client.put(f"/api/review/{FIRST}", json=payload).json()["review"]["marks"][0]
+    assert isinstance(first["vertex"], int)
+    shutil.rmtree(qa_planted.parent / "fastsurfer" / "sub-01")
+    payload["notes"] = "an unrelated edit"
+    again = client.put(f"/api/review/{FIRST}", json=payload).json()["review"]["marks"][0]
+    assert again["vertex"] == first["vertex"] and again["tkr"] == first["tkr"]
+    payload["marks"][0]["grid"] = [30.0, 32.0, 40.0]  # the mark was moved: the old vertex is wrong
+    moved = client.put(f"/api/review/{FIRST}", json=payload).json()["review"]["marks"][0]
+    assert moved["vertex"] is None and moved["tkr"] != first["tkr"]
+
+
+def test_a_malformed_content_length_is_refused(qa_planted):
+    response = _client(qa_planted, "cat").put(
+        f"/api/review/{FIRST}", content=b"{}", headers={"content-length": "abc"})
+    assert response.status_code in (400, 411, 413, 422)
+
+
+def test_overlapping_saves_and_a_submit_leave_a_submitted_review(qa_planted):
+    """Saves that overlap a submit must not un-submit it, and none may fail on a file clash."""
+    from concurrent.futures import ThreadPoolExecutor
+
+    from surfaceqa.review_store import save_review, submit_review
+
+    run = current_run_dir(qa_planted, FIRST).name
+    review = make_review("cat", FIRST, run, submitted=False)
+    for _ in range(20):
+        path = qa_planted / "ratings" / FIRST / run / "cat.json"
+        path.unlink(missing_ok=True)
+        with ThreadPoolExecutor(8) as pool:
+            jobs = [pool.submit(save_review, qa_planted, review) for _ in range(6)]
+            jobs.append(pool.submit(submit_review, qa_planted, review))
+            jobs += [pool.submit(save_review, qa_planted, review) for _ in range(6)]
+            results = [job.result() for job in jobs]  # raises if any write failed
+        assert len(results) == 13
+        assert load_review(qa_planted, FIRST, run, "cat")["submitted"]
+        assert [p.name for p in path.parent.iterdir()] == ["cat.json"]

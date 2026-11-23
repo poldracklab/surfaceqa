@@ -134,3 +134,17 @@ def test_ratings_of_an_earlier_run_are_exported_as_not_current(qa_reviewed):
     export_tables(qa_reviewed)
     assert {r["current_run"] for r in _table(qa_reviewed, "ratings")} == {"no"}
     assert {r["current_run"] for r in _table(qa_reviewed, "marks")} == {"no"}
+
+
+def test_notes_with_quotes_are_read_back_by_a_standard_reader(qa_reviewed):
+    run = current_run_dir(qa_reviewed, RECON).name
+    review = make_review("cat", RECON, run)
+    review["notes"] = '"starts with a quote, has "more" inside'
+    review["items"]["sinus"]["note"] = 'ends with a quote"'
+    submit_review(qa_reviewed, review)
+    export_tables(qa_reviewed)
+    rows = _table(qa_reviewed, "ratings")
+    assert len(rows) == 36 and all(len(r) == 14 and None not in r for r in rows)
+    cat = {r["item"]: r for r in rows if r["reviewer"] == "cat"}
+    assert cat["overall"]["note"] == '"starts with a quote, has "more" inside'
+    assert cat["sinus"]["note"] == 'ends with a quote"'

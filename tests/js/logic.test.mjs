@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import {
   sliceSegments, gridToScreen, screenToGrid, clampSlice, crosshairs, initialCursor, fit, zoomAt,
   isHideKey, findingVoxelsOnSlice, zoomTo, resizeView, stepIndex, visiblePlanes, contourBounds, fitBox,
-  nearestOnContours, marksOnSlice, itemsRemaining, levelForKey, stepItem, screenToGridExact,
+  nearestOnContours, marksOnSlice, itemsRemaining, levelForKey, stepItem, screenToGridExact, isTyping,
 } from "../../src/surfaceqa/web/static/logic.js";
 
 const coronal = {axis: 1, h_axis: 0, v_axis: 2, h_flip: true, v_flip: true, width: 32, height: 40, n_slices: 48};
@@ -193,4 +193,16 @@ test("stepItem moves between items and stops at the ends", () => {
   assert.equal(stepItem(10, 1, 11), 10);
   assert.equal(stepItem(0, -1, 11), 0);
   assert.equal(stepItem(null, 1, 0), null);
+});
+
+test("isTyping is true only where keys are text", () => {
+  assert.equal(isTyping({tagName: "INPUT", type: "text"}), true);
+  assert.equal(isTyping({tagName: "TEXTAREA"}), true);
+  assert.equal(isTyping({tagName: "SELECT"}), true);
+  // a clicked rating button keeps the focus: arrow keys must still move the slice, not the rating
+  assert.equal(isTyping({tagName: "INPUT", type: "radio"}), false);
+  assert.equal(isTyping({tagName: "INPUT", type: "checkbox"}), false);
+  assert.equal(isTyping({tagName: "INPUT", type: "range"}), false);
+  assert.equal(isTyping({tagName: "CANVAS"}), false);
+  assert.equal(isTyping({tagName: "BUTTON"}), false);
 });
