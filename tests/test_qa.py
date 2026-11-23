@@ -5,7 +5,8 @@ import pytest
 
 from surfaceqa import thresholds
 from surfaceqa.pipelines import detect_pipeline
-from surfaceqa.qa import write_findings
+from surfaceqa.findings import Finding
+from surfaceqa.qa import relabel_by_region, write_findings
 from surfaceqa.scoring import suspicion_score
 from surfaceqa.subjectdata import load_subject_data
 from tests.synth import write_qa_files, write_subject
@@ -87,3 +88,25 @@ def test_places_to_look_come_after_findings_and_leave_the_score_alone(tmp_path):
     kinds = [f["kind"] for f in out["findings"]]
     assert kinds == ["pial_out", "look_here"]
     assert out["score"] == round(out["findings"][0]["points"], 1) and out["findings"][1]["points"] == 0
+
+
+@pytest.mark.parametrize("region,kind", [
+    ("sinus", "look_here"), ("cerebellum", "look_here"), ("outer_edge", "look_here"),
+    ("frontal_midline", "look_here"),
+    ("orbitofrontal", "gray_missed"), ("inferior_temporal", "gray_missed"),
+    ("medial_temporal", "gray_missed"),
+])
+def test_cortex_label_beyond_the_pial_surface_is_named_by_where_it_is(region, kind):
+    # Next to the sinus or the edge of the brain, a segmentation's "cortex" outside the pial
+    # surface is usually sinus or dura that the surface was right to leave out (seen on the
+    # recon-all 8.2 reconstruction of NSD subject 07). Calling it "gray matter missed" there
+    # is wrong. Under the frontal and temporal lobes it is where gray matter does get missed.
+    f = Finding("missed_gray", "gray_missed", (1, 2, 3), 79.0, 79, region=region)
+    relabel_by_region([f])
+    assert f.kind == kind
+
+
+def test_other_kinds_are_left_alone_by_relabelling():
+    f = Finding("ribbon_outside_brain", "pial_out", (1, 2, 3), 79.0, 79, region="sinus")
+    relabel_by_region([f])
+    assert f.kind == "pial_out"

@@ -190,3 +190,14 @@ def test_places_to_look_are_listed_separately_and_not_counted(tmp_path):
     assert "Suspicion score 0.0" in page
     row = (qa / "index.html").read_text()
     assert re.search(r'<td class="num">0</td><td></td>', row)  # no findings, nothing "largest"
+
+
+def test_places_to_look_are_explained_and_missed_gray_is_worded_as_a_possibility(tmp_path):
+    subj = write_subject(tmp_path / "fastsurfer", shape=(64, 64, 64))
+    write_qa_files(subj, plant={"seg_blob": ((0.0, 16.0, 0.0), 4.0)})  # network-made segmentation
+    qa = tmp_path / "qa"
+    build_all(find_subjects([subj]), qa)
+    write_site(qa)
+    page = html_lib.unescape((qa / "subjects" / "fastsurfer__sub-01" / "index.html").read_text())
+    assert 'class="spot hint"' in page and "gray matter missed" not in page
+    assert "usually sinus or dura" in page
