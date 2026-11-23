@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import {
   sliceSegments, gridToScreen, screenToGrid, clampSlice, crosshairs, initialCursor, fit, zoomAt,
   isHideKey, findingVoxelsOnSlice, zoomTo, resizeView, stepIndex, visiblePlanes, contourBounds, fitBox,
+  nearestOnContours, marksOnSlice, itemsRemaining, levelForKey, stepItem, screenToGridExact,
 } from "../../src/surfaceqa/web/static/logic.js";
 
 const coronal = {axis: 1, h_axis: 0, v_axis: 2, h_flip: true, v_flip: true, width: 32, height: 40, n_slices: 48};
@@ -115,4 +116,81 @@ test("fitBox fills the view with a box, centred, with padding", () => {
   const padded = fitBox(600, 400, {h: 1, v: 1}, {x0: 10, y0: 20, x1: 29, y1: 39}, 0.125);
   assert.equal(padded.scale, 16); // 12.5% of the box left free on every side
   assert.equal(fitBox(0, 400, {h: 1, v: 1}, {x0: 0, y0: 0, x1: 1, y1: 1}, 0), null);
+});
+
+// ---- reviewing ----
+
+const regionScale = [{id: "none", key: "1"}, {id: "minor", key: "2"}, {id: "major", key: "3"}];
+
+test("nearestOnContours finds the foot of the perpendicular on a segment", () => {
+  const hit = nearestOnContours({"lh.pial": [0, 0, 10, 0]}, 4, 2, 3);
+  assert.deepEqual([hit.x, hit.y, hit.surface, hit.dist], [4, 0, "lh.pial", 2]);
+});
+
+test("nearestOnContours clamps to the end of a segment", () => {
+  const hit = nearestOnContours({"lh.pial": new Float32Array([0, 0, 10, 0])}, 12, 0, 3);
+  assert.deepEqual([hit.x, hit.y, hit.dist], [10, 0, 2]);
+});
+
+test("nearestOnContours picks the nearer of two surfaces", () => {
+  const segments = {"lh.pial": [0, 0, 10, 0], "lh.white": [0, 3, 10, 3]};
+  assert.equal(nearestOnContours(segments, 5, 2.5, 3).surface, "lh.white");
+  assert.equal(nearestOnContours(segments, 5, 0.5, 3).surface, "lh.pial");
+});
+
+test("nearestOnContours is null beyond the distance, and with no segments", () => {
+  assert.equal(nearestOnContours({"lh.pial": [0, 0, 10, 0]}, 5, 3.5, 3), null);
+  assert.equal(nearestOnContours({"lh.pial": []}, 5, 0, 3), null);
+  assert.equal(nearestOnContours({}, 5, 0, 3), null);
+});
+
+test("nearestOnContours measures in mm on anisotropic pixels", () => {
+  const segments = {"lh.pial": [0, 0, 10, 0]};
+  assert.equal(nearestOnContours(segments, 5, 2, 3, {h: 1, v: 2}), null); // 4 mm away
+  assert.equal(nearestOnContours(segments, 5, 2, 3, {h: 1, v: 0.5}).dist, 1);
+});
+
+test("nearestOnContours handles a segment of zero length", () => {
+  assert.equal(nearestOnContours({"lh.pial": [2, 2, 2, 2]}, 2, 3, 3).dist, 1);
+});
+
+test("screenToGridExact keeps fractions and applies flips", () => {
+  assert.deepEqual(screenToGridExact(10.25, 5.5, 7, coronal), [32 - 1 - 10.25, 7, 40 - 1 - 5.5]);
+  assert.deepEqual(screenToGridExact(10.25, 5.5, 7, sagittal), [7, 10.25, 40 - 1 - 5.5]);
+});
+
+test("marksOnSlice returns the marks within reach of a slice", () => {
+  const marks = [{grid: [5, 10.4, 3]}, {grid: [5, 12, 3]}, {grid: [5, 8.6, 3]}];
+  assert.deepEqual(marksOnSlice(marks, coronal, 10, 1), [marks[0], marks[2]]);
+  assert.deepEqual(marksOnSlice(marks, coronal, 10, 0), [marks[0]]);
+  assert.deepEqual(marksOnSlice([], coronal, 10, 1), []);
+});
+
+function reviewWith(rating, grade, unratable = null) {
+  const items = {};
+  for (const id of ["birdseye", "t1", "sinus"]) items[id] = {rating, note: ""};
+  return {items, grade, unratable};
+}
+
+test("itemsRemaining counts unrated items and a missing grade", () => {
+  const ids = ["birdseye", "t1", "sinus"];
+  assert.equal(itemsRemaining(reviewWith(null, null), ids), 4);
+  assert.equal(itemsRemaining(reviewWith("none", null), ids), 1);
+  assert.equal(itemsRemaining(reviewWith("none", "B"), ids), 0);
+  assert.equal(itemsRemaining(reviewWith(null, null, "motion"), ids), 0);
+  assert.equal(itemsRemaining(reviewWith(null, null, "   "), ids), 4);
+});
+
+test("levelForKey maps a number key to a level", () => {
+  assert.equal(levelForKey("2", regionScale), "minor");
+  assert.equal(levelForKey("9", regionScale), null);
+});
+
+test("stepItem moves between items and stops at the ends", () => {
+  assert.equal(stepItem(null, 1, 11), 0);
+  assert.equal(stepItem(null, -1, 11), 0);
+  assert.equal(stepItem(3, 1, 11), 4);
+  assert.equal(stepItem(10, 1, 11), 10);
+  assert.equal(stepItem(0, -1, 11), 0);
+  assert.equal(stepItem(null, 1, 0), null);
 });
