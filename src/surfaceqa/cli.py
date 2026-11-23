@@ -40,7 +40,7 @@ def _report(results: list[BuildResult]) -> None:
     for result in results:
         detail = f"  ({', '.join(result.missing)})" if result.missing else ""
         print(f"{result.key}  {result.status}{detail}")
-    counts = {s: sum(r.status == s for r in results) for s in ("built", "unchanged", "missing", "failed")}
+    counts = {s: sum(r.status == s for r in results) for s in ("built", "updated", "unchanged", "missing", "failed")}
     print(", ".join(f"{n} {status}" for status, n in counts.items() if n))
 
 

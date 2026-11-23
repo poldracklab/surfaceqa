@@ -1,0 +1,31 @@
+<h2>Checklist</h2>
+<article class="item">
+<h3>Bird's-eye view</h3>
+<p>Scroll through the whole brain first: two plausible hemispheres, no missing lobes, no surface jumping across a gap.</p>
+<div class="spots"><button type="button" class="spot" data-scroll="contours">Scroll through all slices</button></div>
+</article>
+<article class="item">
+<h3>T1 quality</h3>
+<p>Look at the image, not the surfaces: blur, uneven intensity, banding from reslicing, defacing artifacts.</p>
+<div class="spots"><button type="button" class="spot" data-scroll="t1">Scroll through all slices, T1 only</button></div>
+</article>
+{% for section in subject.sections %}
+<article class="item" data-region="{{ section.id }}">
+<h3>{{ section.title }}</h3>
+<p>{{ section.look_for }}</p>
+{% if not section.indicators_available %}
+<p class="note">Indicators are not available for this subject. Look through this region.</p>
+{% elif section.findings %}
+<div class="spots">{% for f in section.findings %}<button type="button" class="spot finding" data-finding="{{ f.id }}" data-grid="{{ f.grid | join(',') }}">{{ f.text }}</button>{% endfor %}</div>
+{% elif section.defaults %}
+<p class="note">No indicator fired here. Look anyway:</p>
+<div class="spots">{% for d in section.defaults %}<button type="button" class="spot" data-grid="{{ d.grid | join(',') }}">{{ d.label }}</button>{% endfor %}</div>
+{% else %}
+<p class="note">No indicator fired here. Look anyway by scrolling through this region.</p>
+{% endif %}
+{% if section.hints %}
+<p class="note">Places to look (not counted in the score): the segmentation labels this tissue as cortex and the surface leaves it out. Here that tissue is usually sinus or dura and the surface is usually right. Check that the pial surface nearby has not gone into it.</p>
+<div class="spots">{% for f in section.hints %}<button type="button" class="spot hint" data-finding="{{ f.id }}" data-grid="{{ f.grid | join(',') }}">{{ f.text }}</button>{% endfor %}</div>
+{% endif %}
+</article>
+{% endfor %}

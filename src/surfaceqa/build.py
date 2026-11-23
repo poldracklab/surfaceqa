@@ -15,24 +15,24 @@ from surfaceqa.contours import SURFACE_ORDER, pack_plane, plane_segments
 from surfaceqa.discover import SubjectRef
 from surfaceqa.fingerprint import surface_fingerprint
 from surfaceqa.geometry import DisplayVolume, load_display_volume, to_grid
+from surfaceqa.layout import current_run_dir, read_json, subject_dir
 from surfaceqa.pipelines import PipelineInfo, SubjectFiles, detect_pipeline, subject_files
 from surfaceqa.planes import PLANES, Plane
+from surfaceqa import qa
+from surfaceqa.qa import write_findings
 from surfaceqa.slices import intensity_window, write_plane_slices
+from surfaceqa.subjectdata import input_signature, load_subject_data
 
-BUILD_FORMAT = 1  # raise when the contents of a run folder change, so old runs are re-rendered
+BUILD_FORMAT = 2  # raise when the contents of a run folder change, so old runs are re-rendered
 COLORS = {"lh.pial": "#ffe100", "rh.pial": "#ffe100", "lh.white": "#2b6cff", "rh.white": "#ff3b30"}
 
 
 @dataclass
 class BuildResult:
     key: str
-    status: str  # built, unchanged, missing, failed
+    status: str  # built, updated (indicators recomputed), unchanged, missing, failed
     run: str | None = None
     missing: list[str] = field(default_factory=list)
-
-
-def subject_dir(qa_dir: Path, key: str) -> Path:
-    return Path(qa_dir) / "subjects" / key
 
 
 def _write_json(path: Path, payload: dict) -> None:
@@ -96,6 +96,25 @@ def _run_meta(ref, pipeline, run: str, volume: DisplayVolume, window) -> dict:
     }
 
 
+def _update_qa(ref: SubjectRef, pipeline: PipelineInfo, run_dir: Path) -> bool:
+    """Compute the indicators unless they are up to date; True when they were (re)computed.
+
+    A failure is recorded in the run folder and must not lose the viewer. It is retried
+    on the next build, as are findings made from other input files or by older code.
+    """
+    inputs = input_signature(ref.path, pipeline)
+    if qa.is_up_to_date(run_dir, inputs):
+        return False
+    error_file = run_dir / qa.ERROR_FILE
+    try:
+        write_findings(load_subject_data(ref.path, pipeline), run_dir, inputs)
+        error_file.unlink(missing_ok=True)
+    except Exception:
+        (run_dir / qa.FINDINGS_FILE).unlink(missing_ok=True)  # never leave stale findings
+        error_file.write_text(traceback.format_exc())
+    return True
+
+
 def _render_run(ref, pipeline, files: SubjectFiles, run: str, run_dir: Path) -> None:
     shutil.rmtree(run_dir, ignore_errors=True)  # an interrupted build starts over
     run_dir.mkdir(parents=True)
@@ -122,9 +141,11 @@ def build_subject(ref: SubjectRef, qa_dir: Path) -> BuildResult:
         return _report_missing(ref, pipeline, files, folder)
     run = surface_fingerprint(files.surfaces)
     run_dir = folder / "runs" / run
-    status = "unchanged" if _is_current(run_dir) else "built"
-    if status == "built":
+    rendered = _is_current(run_dir)
+    if not rendered:
         _render_run(ref, pipeline, files, run, run_dir)
+    recomputed = _update_qa(ref, pipeline, run_dir)
+    status = "built" if not rendered else ("updated" if recomputed else "unchanged")
     _clear_stale(folder)
     _write_json(folder / "current.json", {"run": run})
     return BuildResult(ref.key, status, run=run)
@@ -151,9 +172,5 @@ def build_all(refs: list[SubjectRef], qa_dir: Path, jobs: int = 1) -> list[Build
 
 
 def load_meta(qa_dir: Path, key: str) -> dict | None:
-    folder = subject_dir(qa_dir, key)
-    try:
-        run = json.loads((folder / "current.json").read_text())["run"]
-        return json.loads((folder / "runs" / run / "meta.json").read_text())
-    except (OSError, KeyError, ValueError):
-        return None
+    run_dir = current_run_dir(qa_dir, key)
+    return None if run_dir is None else read_json(run_dir / "meta.json")

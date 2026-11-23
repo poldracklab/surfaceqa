@@ -3,6 +3,9 @@ import * as L from "./logic.js";
 
 const LINE_WIDTH = 1.5;
 const PRELOAD = 3;
+const BRAIN_PAD = 0.04; // free space around the brain, as a fraction of its size
+const FINDING_RGB = "0, 229, 255";
+const HINT_RGB = "255, 170, 0"; // places to look, which are not counted as findings
 const WHEEL_STEP = 40; // wheel delta that moves one slice
 const DRAG_THRESHOLD = 3; // pixels of movement before a press becomes a pan
 
@@ -12,7 +15,13 @@ const state = {
   meta: null,
   cursor: [0, 0, 0],
   views: {},
-  show: {surfaces: true, pial: true, white: true},
+  show: {surfaces: true, pial: true, white: true, findings: true},
+  findings: [],
+  voxels: null, // Uint16Array of R, A, S triples for every finding
+  highlight: null,
+  layout: "three",
+  wholeImage: false,
+  focusMm: null,
   keyHide: false,
   hovered: "coronal",
 };
@@ -33,14 +42,34 @@ function makeView(panel) {
   return {
     name, panel, canvas, ctx: canvas.getContext("2d"), plane: state.meta.planes[name],
     view: {scale: 1, dx: 0, dy: 0}, contours: null, images: new Map(), wheel: 0, press: null,
+    findingSlices: new Map(), // slice -> [{id, points}] for the findings overlay
     slider: panel.querySelector(".slider"),
   };
 }
 
+// Fit the view to the brain (the box around its surfaces) so it fills the panel, or to the
+// whole image when asked (the T1 pass looks at the face and skull too) or when there are
+// no surfaces yet.
 function refit(v) {
   const size = pixelSize(v.plane);
-  v.view = L.fit(v.canvas.clientWidth, v.canvas.clientHeight,
-    v.plane.width * size.h, v.plane.height * size.v);
+  const [w, h] = [v.canvas.clientWidth, v.canvas.clientHeight];
+  const brain = !state.wholeImage && v.bounds ? L.fitBox(w, h, size, v.bounds, BRAIN_PAD) : null;
+  v.view = brain || L.fit(w, h, v.plane.width * size.h, v.plane.height * size.v);
+  v.size = [w, h];
+}
+
+// The canvas changed size (window resize, enlarge): keep the zoom and what is at the centre.
+function onResize(v) {
+  const [w, h] = [v.canvas.clientWidth, v.canvas.clientHeight];
+  if (w === 0 || h === 0) return;
+  if (v.size[0] === 0 || v.size[1] === 0) {
+    refit(v); // it was hidden: start from a fitted view, then return to the place being looked at
+    if (state.focusMm) focus(v, state.focusMm);
+  } else {
+    v.view = L.resizeView(v.view, v.size[0], v.size[1], w, h);
+  }
+  v.size = [w, h];
+  draw(v);
 }
 
 function image(v, i) {
@@ -119,6 +148,33 @@ function drawContours(v, i) {
   }
 }
 
+// Findings whose voxels touch a slice of this view, computed once per slice.
+function findingsOnSlice(v, i) {
+  if (!v.findingSlices.has(i)) {
+    const hits = [];
+    for (const finding of state.findings) {
+      const points = L.findingVoxelsOnSlice(state.voxels, finding, v.plane, i);
+      if (points.length) hits.push({id: finding.id, hint: finding.kind === "look_here", points});
+    }
+    v.findingSlices.set(i, hits);
+  }
+  return v.findingSlices.get(i);
+}
+
+function drawFindings(v, i) {
+  if (!state.voxels || !state.show.findings || state.keyHide) return;
+  const [x0, y0] = toCanvas(v, -0.5, -0.5);
+  const [x1, y1] = toCanvas(v, 0.5, 0.5);
+  for (const hit of findingsOnSlice(v, i)) {
+    const rgb = hit.hint ? HINT_RGB : FINDING_RGB;
+    v.ctx.fillStyle = `rgba(${rgb}, ${hit.id === state.highlight ? 0.7 : 0.35})`;
+    for (const [x, y] of hit.points) {
+      const [px, py] = toCanvas(v, x - 0.5, y - 0.5);
+      v.ctx.fillRect(px, py, x1 - x0, y1 - y0);
+    }
+  }
+}
+
 function drawCrosshairs(v) {
   const cross = L.crosshairs(state.cursor, v.plane);
   const [cx, cy] = toCanvas(v, cross.x, cross.y);
@@ -140,6 +196,7 @@ function draw(v) {
   sizeCanvas(v);
   v.ctx.clearRect(0, 0, v.canvas.clientWidth, v.canvas.clientHeight);
   drawImage(v, i);
+  drawFindings(v, i);
   drawContours(v, i);
   drawCrosshairs(v);
   v.panel.querySelector(".readout").textContent = `${v.name}  slice ${i + 1} / ${v.plane.n_slices}`;
@@ -205,12 +262,44 @@ function onPointerUp(v, event) {
   drawAll();
 }
 
+// Show all three views ("three") or one large view of a single plane.
+// With `fit`, the views start again fitted to the brain, or to the whole image.
+function setLayout(layout, {fit = false, wholeImage = false} = {}) {
+  const visible = L.visiblePlanes(layout);
+  const single = visible.length === 1;
+  state.layout = single ? visible[0] : "three";
+  if (fit) {
+    state.focusMm = null;
+    state.wholeImage = wholeImage;
+  }
+  for (const v of Object.values(state.views)) {
+    if (fit) v.size = [0, 0]; // refit when the new size is known
+    v.panel.classList.toggle("enlarged", single && v.name === visible[0]);
+  }
+  root.querySelector(".panels").classList.toggle("has-enlarged", single);
+  for (const button of root.querySelectorAll(".layout")) {
+    button.classList.toggle("active", button.dataset.layout === state.layout);
+  }
+  if (single) state.hovered = visible[0];
+  if (fit) requestAnimationFrame(refitVisible); // the panel may not change size, so no resize event
+}
+
+function refitVisible() {
+  for (const v of Object.values(state.views)) {
+    if (v.canvas.clientWidth === 0) continue;
+    refit(v);
+    draw(v);
+  }
+}
+
 function toggleEnlarge(v) {
-  const panels = root.querySelector(".panels");
-  const enlarging = !v.panel.classList.contains("enlarged");
-  Object.values(state.views).forEach((o) => o.panel.classList.remove("enlarged"));
-  v.panel.classList.toggle("enlarged", enlarging);
-  panels.classList.toggle("has-enlarged", enlarging);
+  setLayout(state.layout === v.name ? "three" : v.name);
+}
+
+function setSurfaces(shown) {
+  state.show.surfaces = shown;
+  document.getElementById("show-surfaces").checked = shown;
+  drawAll();
 }
 
 function typing(event) {
@@ -249,16 +338,21 @@ function bindView(v) {
   v.canvas.addEventListener("dblclick", () => toggleEnlarge(v));
   v.slider.max = v.plane.n_slices - 1;
   v.slider.addEventListener("input", () => step(v, Number(v.slider.value) - state.cursor[v.plane.axis]));
-  new ResizeObserver(() => { refit(v); draw(v); }).observe(v.canvas);
+  new ResizeObserver(() => onResize(v)).observe(v.canvas);
 }
 
 function bindToolbar() {
-  for (const key of ["surfaces", "pial", "white"]) {
+  for (const key of ["surfaces", "pial", "white", "findings"]) {
     const box = document.getElementById(`show-${key}`);
     box.addEventListener("change", () => { state.show[key] = box.checked; drawAll(); });
   }
+  for (const button of root.querySelectorAll(".layout")) {
+    button.addEventListener("click", () => setLayout(button.dataset.layout));
+  }
   document.getElementById("reset-view").addEventListener("click", () => {
     state.cursor = L.initialCursor(state.meta.shape);
+    state.focusMm = null;
+    state.wholeImage = false;
     Object.values(state.views).forEach(refit);
     drawAll();
   });
@@ -276,7 +370,59 @@ async function loadContours(v) {
     fetch(`${runUrl}contours_${v.name}.bin`).then((r) => r.arrayBuffer()),
   ]);
   v.contours = {index, buffer};
+  v.bounds = L.contourBounds(buffer, index);
+  refit(v); // now that the brain's extent is known
   draw(v);
+}
+
+// Findings are optional: a subject without them still gets the viewer.
+async function loadFindings() {
+  try {
+    const found = await fetch(`${runUrl}findings.json`).then((r) => (r.ok ? r.json() : null));
+    if (!found || !found.findings.length) return;
+    const buffer = await fetch(`${runUrl}findings_voxels.bin`).then((r) => r.arrayBuffer());
+    state.findings = found.findings;
+    state.voxels = new Uint16Array(buffer);
+    drawAll();
+  } catch (error) {
+    console.warn("surfaceqa: findings could not be loaded", error);
+  }
+}
+
+// Zoom a view onto the cursor. A hidden view is left alone and marked so that it
+// is zoomed when it becomes visible again.
+function focus(v, zoomMm) {
+  const {x, y} = L.gridToScreen(state.cursor, v.plane);
+  const view = L.zoomTo(v.canvas.clientWidth, v.canvas.clientHeight, v.plane, pixelSize(v.plane), x, y, zoomMm);
+  if (view) v.view = view;
+  else v.size = [0, 0];
+}
+
+function goTo(grid, {zoomMm} = {}) {
+  state.cursor = grid.map((value, axis) => L.clampSlice(value, state.meta.shape[axis]));
+  state.focusMm = zoomMm || null;
+  if (zoomMm) Object.values(state.views).forEach((v) => focus(v, zoomMm));
+  drawAll();
+  root.closest(".workspace").scrollIntoView({block: "nearest"});
+}
+
+function goToSlice(planeName, slice) {
+  const v = state.views[planeName];
+  const grid = [...state.cursor];
+  grid[v.plane.axis] = slice;
+  Object.values(state.views).forEach(refit);
+  goTo(grid);
+}
+
+function setHighlight(id) {
+  state.highlight = id;
+  drawAll();
+}
+
+// What other scripts on the page (the checklist) may use.
+function publicData() {
+  const contours = Object.fromEntries(Object.values(state.views).map((v) => [v.name, v.contours]));
+  return {meta: state.meta, contours, sliceUrl};
 }
 
 function showError(error) {
@@ -302,6 +448,10 @@ async function start() {
   window.addEventListener("blur", () => { if (state.keyHide) setKeyHide(false); });
   drawAll();
   await Promise.all(Object.values(state.views).map(loadContours));
+  loadFindings();
+  return publicData();
 }
 
-start().catch(showError);
+const ready = start();
+window.surfaceqaViewer = {ready, goTo, goToSlice, setHighlight, setLayout, setSurfaces};
+ready.catch(showError);

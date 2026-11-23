@@ -64,3 +64,78 @@ export function zoomAt(view, factor, px, py) {
 export function isHideKey(event) {
   return event.code === "KeyS" && !event.metaKey && !event.ctrlKey && !event.altKey;
 }
+
+// Screen coordinates of one finding's voxels that lie on a slice of a plane.
+export function findingVoxelsOnSlice(voxels, finding, plane, slice) {
+  const out = [];
+  const end = (finding.voxel_start + finding.voxel_count) * 3;
+  for (let k = finding.voxel_start * 3; k < end; k += 3) {
+    if (voxels[k + plane.axis] !== slice) continue;
+    const grid = [voxels[k], voxels[k + 1], voxels[k + 2]];
+    const {x, y} = gridToScreen(grid, plane);
+    out.push([x, y]);
+  }
+  return out;
+}
+
+// After the canvas changes size: same zoom, same image point at the centre.
+export function resizeView(view, oldW, oldH, newW, newH) {
+  return {scale: view.scale, dx: view.dx + (newW - oldW) / 2, dy: view.dy + (newH - oldH) / 2};
+}
+
+// A view centred on screen point (x, y) showing fieldMm across the smaller canvas dimension.
+// Returns null for a canvas with no size (a hidden view), which cannot be zoomed.
+export function zoomTo(viewW, viewH, plane, pixel, x, y, fieldMm) {
+  if (viewW <= 0 || viewH <= 0) return null;
+  const scale = Math.min(viewW, viewH) / fieldMm;
+  return {
+    scale,
+    dx: viewW / 2 - (x + 0.5) * pixel.h * scale,
+    dy: viewH / 2 - (y + 0.5) * pixel.v * scale,
+  };
+}
+
+// Next position in a list of n items; no wrapping; from "nothing selected" start at either end.
+export function stepIndex(current, delta, n) {
+  if (n === 0) return null;
+  if (current === null) return delta > 0 ? 0 : n - 1;
+  return Math.min(n - 1, Math.max(0, current + delta));
+}
+
+const PLANE_NAMES = ["coronal", "sagittal", "axial"];
+
+// Which views a layout shows: "three" (or anything unknown) shows all, otherwise the one named.
+export function visiblePlanes(layout) {
+  return PLANE_NAMES.includes(layout) ? [layout] : [...PLANE_NAMES];
+}
+
+// The box, in screen pixels, around every contour of a plane (all surfaces, all slices),
+// or null when there are none.
+export function contourBounds(buffer, index) {
+  const raw = new Uint16Array(buffer);
+  if (raw.length === 0) return null;
+  let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+  for (let k = 0; k < raw.length; k += 2) {
+    const x = raw[k], y = raw[k + 1];
+    if (x < x0) x0 = x;
+    if (x > x1) x1 = x;
+    if (y < y0) y0 = y;
+    if (y > y1) y1 = y;
+  }
+  const toPixel = (value) => value / index.quant - 0.5;
+  return {x0: toPixel(x0), y0: toPixel(y0), x1: toPixel(x1), y1: toPixel(y1)};
+}
+
+// A view that fills the canvas with a box of image pixels, leaving `pad` (a fraction of
+// the box) free on every side. Null for a canvas with no size.
+export function fitBox(viewW, viewH, pixel, box, pad) {
+  if (viewW <= 0 || viewH <= 0) return null;
+  const width = (box.x1 - box.x0 + 1) * pixel.h * (1 + 2 * pad);
+  const height = (box.y1 - box.y0 + 1) * pixel.v * (1 + 2 * pad);
+  const scale = Math.min(viewW / width, viewH / height);
+  return {
+    scale,
+    dx: viewW / 2 - ((box.x0 + box.x1) / 2 + 0.5) * pixel.h * scale,
+    dy: viewH / 2 - ((box.y0 + box.y1) / 2 + 0.5) * pixel.v * scale,
+  };
+}
