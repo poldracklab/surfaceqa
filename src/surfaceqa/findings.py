@@ -22,17 +22,30 @@ class Finding:
     voxels: np.ndarray | None = None
 
 
+def _margin_box(margin_mm: float, voxel_sizes) -> tuple[int, ...]:
+    """Size of the box, in voxels per axis, that reaches margin_mm in every direction.
+
+    The margin is counted in whole voxels along each axis and applies to diagonal
+    neighbours too, so a boundary that is off by one voxel in any direction is inside it.
+    """
+    steps = [int(np.ceil(margin_mm / size - EPS)) for size in voxel_sizes]
+    return tuple(2 * s + 1 for s in steps)
+
+
 def deeper_than(mask: np.ndarray, margin_mm: float, voxel_sizes) -> np.ndarray:
-    """Voxels of mask farther than margin_mm from the nearest voxel outside it."""
-    return ndimage.distance_transform_edt(mask, sampling=voxel_sizes) > margin_mm + EPS
+    """Voxels of mask with no voxel outside the mask within the margin.
+
+    The edge of the volume does not count as outside.
+    """
+    box = _margin_box(margin_mm, voxel_sizes)
+    return ndimage.minimum_filter(mask.astype(np.uint8), size=box, mode="nearest").astype(bool)
 
 
 def farther_than(mask: np.ndarray, from_mask: np.ndarray, margin_mm: float, voxel_sizes) -> np.ndarray:
-    """Voxels of mask farther than margin_mm from the nearest voxel of from_mask."""
-    if not from_mask.any():
-        return mask.copy()
-    distance = ndimage.distance_transform_edt(~from_mask, sampling=voxel_sizes)
-    return mask & (distance > margin_mm + EPS)
+    """Voxels of mask with no voxel of from_mask within the margin."""
+    box = _margin_box(margin_mm, voxel_sizes)
+    near = ndimage.maximum_filter(from_mask.astype(np.uint8), size=box, mode="constant", cval=0)
+    return mask & ~near.astype(bool)
 
 
 def _deepest_voxel(cluster: np.ndarray, voxel_sizes) -> tuple[int, int, int]:

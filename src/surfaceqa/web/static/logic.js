@@ -106,7 +106,9 @@ export function resizeView(view, oldW, oldH, newW, newH) {
 }
 
 // A view centred on screen point (x, y) showing fieldMm across the smaller canvas dimension.
+// Returns null for a canvas with no size (a hidden view), which cannot be zoomed.
 export function zoomTo(viewW, viewH, plane, pixel, x, y, fieldMm) {
+  if (viewW <= 0 || viewH <= 0) return null;
   const scale = Math.min(viewW, viewH) / fieldMm;
   return {
     scale,

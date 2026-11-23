@@ -14,7 +14,9 @@
 <article class="item" data-region="{{ section.id }}">
 <h3>{{ section.title }}</h3>
 <p>{{ section.look_for }}</p>
-{% if section.findings %}
+{% if not section.indicators_available %}
+<p class="note">Indicators are not available for this subject. Look through this region.</p>
+{% elif section.findings %}
 <div class="spots">{% for f in section.findings %}<button type="button" class="spot finding" data-finding="{{ f.id }}" data-grid="{{ f.grid | join(',') }}">{{ f.text }}</button>{% endfor %}</div>
 {% elif section.defaults %}
 <p class="note">No indicator fired here. Look anyway:</p>

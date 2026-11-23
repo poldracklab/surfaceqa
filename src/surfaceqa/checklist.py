@@ -22,6 +22,13 @@ def _section(region, findings: list[dict], defaults: dict) -> dict:
             "findings": mine, "defaults": defaults.get(region.id, [])}
 
 
-def checklist_sections(found: dict) -> list[dict]:
-    """One section per region, in Kay's order; findings keep their most-points-first order."""
-    return [_section(region, found["findings"], found["defaults"]) for region in REGIONS]
+def checklist_sections(found: dict | None) -> list[dict]:
+    """One section per region, in Kay's order; findings keep their most-points-first order.
+
+    Every region is always listed. Without findings (the indicators failed or never ran)
+    each section says so instead of implying that nothing was found.
+    """
+    findings = found["findings"] if found else []
+    defaults = found["defaults"] if found else {}
+    sections = [_section(region, findings, defaults) for region in REGIONS]
+    return [{**section, "indicators_available": found is not None} for section in sections]

@@ -11,10 +11,13 @@ from surfaceqa.indicators_surface import SURFACE_INDICATORS
 from surfaceqa.indicators_volume import VOLUME_INDICATORS, IndicatorResult
 from surfaceqa.layout import current_run_dir, read_json
 from surfaceqa.regions import assign_region, build_context, default_locations
+from surfaceqa import scoring
 from surfaceqa.scoring import finding_points, suspicion_score
 from surfaceqa.subjectdata import SubjectData
 
+QA_VERSION = 2  # raise whenever indicators, regions or scoring change, so findings are recomputed
 FINDINGS_FILE = "findings.json"
+ERROR_FILE = "qa_error.txt"
 VOXELS_FILE = "findings_voxels.bin"
 
 
@@ -53,16 +56,25 @@ def _records_and_voxels(findings: list[Finding]) -> tuple[list[dict], bytes]:
     return records, blob
 
 
-def write_findings(data: SubjectData, run_dir: Path) -> dict:
+def write_findings(data: SubjectData, run_dir: Path, inputs: dict | None = None) -> dict:
+    """`inputs` is the signature of the files the data was read from (see is_up_to_date)."""
     results, region_note = run_indicators(data)
     findings = [f for result in results for f in result.findings]
     records, blob = _records_and_voxels(findings)
-    out = {"score": suspicion_score(findings), "thresholds": thresholds.as_dict(),
-           "region_note": region_note, "indicators": [_indicator_record(r) for r in results],
+    out = {"qa_version": QA_VERSION, "inputs": inputs or {},
+           "score": suspicion_score(findings), "thresholds": thresholds.as_dict(),
+           "scoring": scoring.as_dict(), "region_note": region_note, "indicators": [_indicator_record(r) for r in results],
            "findings": records, "defaults": default_locations(data)}
     (Path(run_dir) / VOXELS_FILE).write_bytes(blob)
     (Path(run_dir) / FINDINGS_FILE).write_text(json.dumps(out, indent=1))
     return out
+
+
+def is_up_to_date(run_dir: Path, inputs: dict) -> bool:
+    """Findings exist, were made by this version of the indicators, from these input files."""
+    found = read_json(Path(run_dir) / FINDINGS_FILE)
+    return (found is not None and found.get("qa_version") == QA_VERSION
+            and found.get("inputs") == inputs)
 
 
 def load_findings(qa_dir: Path, key: str) -> dict | None:

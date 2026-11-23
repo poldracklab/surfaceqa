@@ -45,7 +45,7 @@ def _optional(reader, *args):
     """The reader's result, or None when the file is absent or unreadable."""
     try:
         return reader(*args)
-    except (OSError, ValueError, IndexError):
+    except Exception:  # truncated, empty or half-written files raise many different errors
         return None
 
 
@@ -92,6 +92,27 @@ def _hemi_surface(subject_dir: Path, hemi: str, pial_path: Path, tkr_to_grid) ->
         defect_labels=_optional(nib.freesurfer.read_morph_data, surf / f"{hemi}.defect_labels"),
         nofix_grid=None if nofix is None else nofix[0],
     )
+
+
+def _input_files(pipeline: PipelineInfo) -> list[str]:
+    """Every optional file the indicators read, relative to the subject folder."""
+    mri = ["ribbon.mgz", "lh.ribbon.mgz", "rh.ribbon.mgz", "norm.mgz", PARC_FILE,
+           SEG_FILE.get(pipeline.name, DEFAULT_SEG_FILE),
+           *NONBRAIN_FILES.get(pipeline.name, DEFAULT_NONBRAIN_FILES)]
+    surf = [f"{hemi}.{name}" for hemi in HEMIS for name in ("thickness", "defect_labels", "orig.nofix")]
+    return [f"mri/{f}" for f in mri] + [f"surf/{f}" for f in surf] + [
+        f"label/{hemi}.cortex.label" for hemi in HEMIS]
+
+
+def input_signature(subject_dir: Path, pipeline: PipelineInfo) -> dict[str, list[int]]:
+    """Size and modification time of each indicator input that exists, to detect changes."""
+    signature = {}
+    for rel in _input_files(pipeline):
+        path = Path(subject_dir) / rel
+        if path.is_file():
+            stat = path.stat()
+            signature[rel] = [stat.st_size, stat.st_mtime_ns]
+    return signature
 
 
 def load_subject_data(subject_dir: Path, pipeline: PipelineInfo) -> SubjectData:

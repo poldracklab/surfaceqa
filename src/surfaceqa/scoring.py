@@ -14,11 +14,20 @@ def finding_points(finding: Finding) -> float:
 
 
 def suspicion_score(findings: list[Finding]) -> float:
-    return round(sum(finding_points(f) for f in findings), 1)
+    return round(float(sum(finding_points(f) for f in findings)), 1)
+
+
+def as_dict() -> dict:
+    """What the score was computed with, for the report."""
+    return {"WEIGHT": dict(WEIGHT), "UNIT": UNIT, "CAP": CAP}
 
 
 def rank_within_pipeline(scores: dict[str, tuple[str, float]]) -> dict[str, dict]:
-    """key -> {"rank", "of"}; highest score is rank 1 and ties share the lower number."""
+    """key -> {"rank", "of"} within its group; highest score is rank 1, ties share the lower number.
+
+    The group is whatever label the caller passes with each score. The site groups by
+    source folder: scores from different pipelines, versions or resolutions do not compare.
+    """
     ranks = {}
     for pipeline in {p for p, _ in scores.values()}:
         group = {key: score for key, (p, score) in scores.items() if p == pipeline}

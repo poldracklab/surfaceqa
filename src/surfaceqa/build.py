@@ -18,9 +18,10 @@ from surfaceqa.geometry import DisplayVolume, load_display_volume, to_grid
 from surfaceqa.layout import current_run_dir, read_json, subject_dir
 from surfaceqa.pipelines import PipelineInfo, SubjectFiles, detect_pipeline, subject_files
 from surfaceqa.planes import PLANES, Plane
+from surfaceqa import qa
 from surfaceqa.qa import write_findings
 from surfaceqa.slices import intensity_window, write_plane_slices
-from surfaceqa.subjectdata import load_subject_data
+from surfaceqa.subjectdata import input_signature, load_subject_data
 
 BUILD_FORMAT = 2  # raise when the contents of a run folder change, so old runs are re-rendered
 COLORS = {"lh.pial": "#ffe100", "rh.pial": "#ffe100", "lh.white": "#2b6cff", "rh.white": "#ff3b30"}
@@ -29,7 +30,7 @@ COLORS = {"lh.pial": "#ffe100", "rh.pial": "#ffe100", "lh.white": "#2b6cff", "rh
 @dataclass
 class BuildResult:
     key: str
-    status: str  # built, unchanged, missing, failed
+    status: str  # built, updated (indicators recomputed), unchanged, missing, failed
     run: str | None = None
     missing: list[str] = field(default_factory=list)
 
@@ -95,14 +96,23 @@ def _run_meta(ref, pipeline, run: str, volume: DisplayVolume, window) -> dict:
     }
 
 
-def _run_qa(ref: SubjectRef, pipeline: PipelineInfo, run_dir: Path) -> None:
-    """Compute the indicators; a failure here is recorded and must not lose the viewer."""
-    error_file = run_dir.parent.parent / "qa_error.txt"
+def _update_qa(ref: SubjectRef, pipeline: PipelineInfo, run_dir: Path) -> bool:
+    """Compute the indicators unless they are up to date; True when they were (re)computed.
+
+    A failure is recorded in the run folder and must not lose the viewer. It is retried
+    on the next build, as are findings made from other input files or by older code.
+    """
+    inputs = input_signature(ref.path, pipeline)
+    if qa.is_up_to_date(run_dir, inputs):
+        return False
+    error_file = run_dir / qa.ERROR_FILE
     try:
-        write_findings(load_subject_data(ref.path, pipeline), run_dir)
+        write_findings(load_subject_data(ref.path, pipeline), run_dir, inputs)
         error_file.unlink(missing_ok=True)
     except Exception:
+        (run_dir / qa.FINDINGS_FILE).unlink(missing_ok=True)  # never leave stale findings
         error_file.write_text(traceback.format_exc())
+    return True
 
 
 def _render_run(ref, pipeline, files: SubjectFiles, run: str, run_dir: Path) -> None:
@@ -112,7 +122,6 @@ def _render_run(ref, pipeline, files: SubjectFiles, run: str, run_dir: Path) -> 
     window = intensity_window(volume.data)
     _write_slices(volume, window, run_dir)
     _write_contours(_load_surfaces_grid(files, volume), volume, run_dir)
-    _run_qa(ref, pipeline, run_dir)
     _write_json(run_dir / "meta.json", _run_meta(ref, pipeline, run, volume, window))  # last
 
 
@@ -132,9 +141,11 @@ def build_subject(ref: SubjectRef, qa_dir: Path) -> BuildResult:
         return _report_missing(ref, pipeline, files, folder)
     run = surface_fingerprint(files.surfaces)
     run_dir = folder / "runs" / run
-    status = "unchanged" if _is_current(run_dir) else "built"
-    if status == "built":
+    rendered = _is_current(run_dir)
+    if not rendered:
         _render_run(ref, pipeline, files, run, run_dir)
+    recomputed = _update_qa(ref, pipeline, run_dir)
+    status = "built" if not rendered else ("updated" if recomputed else "unchanged")
     _clear_stale(folder)
     _write_json(folder / "current.json", {"run": run})
     return BuildResult(ref.key, status, run=run)

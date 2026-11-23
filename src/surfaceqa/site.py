@@ -9,6 +9,7 @@ from urllib.parse import quote
 from jinja2 import Environment, PackageLoader, select_autoescape
 
 from surfaceqa.build import load_meta
+from surfaceqa.layout import current_run_dir
 from surfaceqa.checklist import checklist_sections, finding_text
 from surfaceqa.qa import load_findings
 from surfaceqa.regions import REGIONS
@@ -60,26 +61,35 @@ def _qa_fields(qa_dir: Path, folder: Path) -> dict:
     """What the indicators produced for the subject's current run."""
     found = load_findings(qa_dir, folder.name)
     if found is None:
-        return {"qa": None, "score": None, "qa_failed": (folder / "qa_error.txt").is_file()}
+        return {"qa": None, "score": None, "qa_failed": _qa_failed(qa_dir, folder.name),
+                "sections": checklist_sections(None)}
     titles = {region.id: region.title for region in REGIONS}
     top = found["findings"][0] if found["findings"] else None
     largest = f"{finding_text(top)} · {titles[top['region']]}" if top else ""
-    return {"qa": found, "score": found["score"], "qa_failed": False, "largest": largest,
-            "not_run": [i for i in found["indicators"] if i["status"] == "not run"],
-            "sections": checklist_sections(found)}
+    not_run = [i for i in found["indicators"] if i["status"] == "not run"]
+    partial = [i for i in found["indicators"] if i["status"] == "ran" and i["reason"]]
+    any_ran = len(not_run) < len(found["indicators"])
+    return {"qa": found, "score": found["score"] if any_ran else None, "qa_failed": False,
+            "largest": largest, "not_run": not_run, "partial": partial,
+            "n_indicators": len(found["indicators"]), "sections": checklist_sections(found)}
+
+
+def _qa_failed(qa_dir: Path, key: str) -> bool:
+    run_dir = current_run_dir(qa_dir, key)
+    return run_dir is not None and (run_dir / "qa_error.txt").is_file()
 
 
 def _add_ranks(records: list[dict]) -> None:
-    scored = {r["key"]: (r["pipeline"], r["score"]) for r in records if r["score"] is not None}
+    scored = {r["key"]: (r["source"], r["score"]) for r in records if r["score"] is not None}
     ranks = rank_within_pipeline(scored)
     for record in records:
         record["rank"] = ranks.get(record["key"])
 
 
 def _review_order(record: dict) -> tuple:
-    """Grouped by pipeline; most suspicious first; subjects without a score last."""
+    """Grouped by source folder; most suspicious first; subjects without a score last."""
     score = record["score"]
-    return (record["pipeline"], score is None, -(score or 0.0), record["key"])
+    return (record["source"], score is None, -(score or 0.0), record["key"])
 
 
 def _subject_records(qa_dir: Path) -> list[dict]:

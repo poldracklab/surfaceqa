@@ -53,8 +53,12 @@ function refit(v) {
 function onResize(v) {
   const [w, h] = [v.canvas.clientWidth, v.canvas.clientHeight];
   if (w === 0 || h === 0) return;
-  if (v.size[0] === 0 || v.size[1] === 0) refit(v);
-  else v.view = L.resizeView(v.view, v.size[0], v.size[1], w, h);
+  if (v.size[0] === 0 || v.size[1] === 0) {
+    refit(v); // it was hidden: start from a fitted view, then return to the place being looked at
+    if (state.focusMm) focus(v, state.focusMm);
+  } else {
+    v.view = L.resizeView(v.view, v.size[0], v.size[1], w, h);
+  }
   v.size = [w, h];
   draw(v);
 }
@@ -302,6 +306,7 @@ function bindToolbar() {
   }
   document.getElementById("reset-view").addEventListener("click", () => {
     state.cursor = L.initialCursor(state.meta.shape);
+    state.focusMm = null;
     Object.values(state.views).forEach(refit);
     drawAll();
   });
@@ -336,13 +341,19 @@ async function loadFindings() {
   }
 }
 
+// Zoom a view onto the cursor. A hidden view is left alone and marked so that it
+// is zoomed when it becomes visible again.
+function focus(v, zoomMm) {
+  const {x, y} = L.gridToScreen(state.cursor, v.plane);
+  const view = L.zoomTo(v.canvas.clientWidth, v.canvas.clientHeight, v.plane, pixelSize(v.plane), x, y, zoomMm);
+  if (view) v.view = view;
+  else v.size = [0, 0];
+}
+
 function goTo(grid, {zoomMm} = {}) {
   state.cursor = grid.map((value, axis) => L.clampSlice(value, state.meta.shape[axis]));
-  for (const v of Object.values(state.views)) {
-    if (!zoomMm) continue;
-    const {x, y} = L.gridToScreen(state.cursor, v.plane);
-    v.view = L.zoomTo(v.canvas.clientWidth, v.canvas.clientHeight, v.plane, pixelSize(v.plane), x, y, zoomMm);
-  }
+  state.focusMm = zoomMm || null;
+  if (zoomMm) Object.values(state.views).forEach((v) => focus(v, zoomMm));
   drawAll();
   root.scrollIntoView({behavior: "smooth", block: "start"});
 }

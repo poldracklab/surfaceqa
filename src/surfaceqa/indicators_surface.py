@@ -19,10 +19,17 @@ def _vertex_finding(name: str, kind: str, hemi: str, positions: np.ndarray) -> F
     return Finding(name, kind, grid, None, len(positions), hemi=hemi, voxels=voxels)
 
 
-def _capped(name: str, kind: str, findings: list[Finding]) -> IndicatorResult:
+def _capped(name: str, kind: str, findings: list[Finding], reason: str = "") -> IndicatorResult:
     findings = sorted(findings, key=lambda f: -f.n)
     limit = thresholds.MAX_FINDINGS_PER_INDICATOR
-    return IndicatorResult(name, kind, findings=findings[:limit], dropped=max(len(findings) - limit, 0))
+    return IndicatorResult(name, kind, reason=reason, findings=findings[:limit],
+                           dropped=max(len(findings) - limit, 0))
+
+
+def _unchecked(data: SubjectData, usable: dict, why: str) -> str:
+    """Says which hemispheres were left out, so a partial run is not read as a full one."""
+    skipped = [hemi for hemi in data.hemis if hemi not in usable]
+    return f"{', '.join(skipped)} not checked: {why}" if skipped else ""
 
 
 def _connected_groups(selected: np.ndarray, faces: np.ndarray) -> list[np.ndarray]:
@@ -41,7 +48,7 @@ def _thick_vertices(surface: HemiSurface) -> np.ndarray:
     if surface.cortex is None:
         return thick
     in_cortex = np.zeros(len(thick), dtype=bool)
-    in_cortex[surface.cortex] = True
+    in_cortex[surface.cortex[surface.cortex < len(thick)]] = True
     return thick & in_cortex
 
 
@@ -58,7 +65,7 @@ def thick_patches(data: SubjectData) -> IndicatorResult:
     if not usable:
         return not_run(name, kind, "no thickness files")
     findings = [f for hemi, s in usable.items() for f in _hemi_thick_patches(name, hemi, s)]
-    return _capped(name, kind, findings)
+    return _capped(name, kind, findings, _unchecked(data, usable, "no thickness file"))
 
 
 def _has_defect_data(surface: HemiSurface) -> bool:
@@ -79,7 +86,7 @@ def topology_defects(data: SubjectData) -> IndicatorResult:
     if not usable:
         return not_run(name, kind, "no defect labels with a matching pre-fix surface (orig.nofix)")
     findings = [f for hemi, s in usable.items() for f in _hemi_defects(name, hemi, s)]
-    return _capped(name, kind, findings)
+    return _capped(name, kind, findings, _unchecked(data, usable, "no defect labels with a matching pre-fix surface"))
 
 
 SURFACE_INDICATORS = (thick_patches, topology_defects)
