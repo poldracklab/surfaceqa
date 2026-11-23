@@ -83,3 +83,10 @@ def earlier_reviews(qa_dir: Path, key: str, current_run: str, reviewer: str) -> 
     found = [_read(run / f"{reviewer}.json") for run in runs]
     submitted = [review for review in found if review and review["submitted"]]
     return sorted(submitted, key=lambda review: review["submitted"], reverse=True)
+
+
+def all_reviews(qa_dir: Path, key: str) -> list[dict]:
+    """Every readable review of the subject, over all its runs, by run and reviewer."""
+    folder = _subject_folder(qa_dir, key)
+    runs = sorted(p for p in folder.iterdir() if p.is_dir()) if folder.is_dir() else []
+    return [review for run in runs for review in _reviews_in(run)]

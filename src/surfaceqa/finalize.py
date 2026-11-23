@@ -5,7 +5,9 @@ from pathlib import Path
 
 from surfaceqa.consensus import combine
 from surfaceqa.layout import current_run_dir, read_json
+from surfaceqa.protocol import load_protocol
 from surfaceqa.review_store import list_reviews
+from surfaceqa.reviews import item_title
 
 
 def _keys_with_a_run(qa_dir: Path) -> list[tuple[str, str]]:
@@ -35,3 +37,24 @@ def load_final(qa_dir: Path, key: str) -> dict | None:
 def is_stale(final: dict, reviews: list[dict], run: str) -> bool:
     """True when the surfaces or the submitted reviews changed after finalize ran."""
     return final["run"] != run or final["inputs"] != combine(reviews)["inputs"]
+
+
+def _who_said_what(values: dict[str, str], labels: dict[str, str]) -> str:
+    return ", ".join(f"{reviewer} {labels.get(value, value)}" for reviewer, value in values.items())
+
+
+def describe_disagreement(record: dict) -> str:
+    """One line naming what the reviewers of a subject disagree on, and who said what."""
+    protocol = load_protocol()
+    levels = protocol["region_scale"] + protocol["pass_scale"]
+    labels = {level["id"]: level["label"] for level in levels}
+    parts = []
+    for item in record["disagreements"]:
+        if item == "grade":
+            parts.append(f"grade ({_who_said_what(record['grade']['grades'], {})})")
+        elif item == "unratable":
+            parts.append("whether the subject can be rated")
+        else:
+            said = _who_said_what(record["items"][item]["ratings"], labels)
+            parts.append(f"{item_title(item)} ({said})")
+    return f"{record['key']}: {'; '.join(parts)}"
