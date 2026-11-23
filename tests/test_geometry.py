@@ -46,6 +46,8 @@ def test_display_volume_reorients_any_orientation(tmp_path, orientation):
 def test_surface_sits_on_sphere_edge_in_grid(synth_subject):
     vol = load_display_volume(synth_subject / "mri" / "orig.mgz")
     verts, _ = nib.freesurfer.read_geometry(synth_subject / "surf" / "lh.pial")
-    grid = to_grid(verts * 0.95, vol.tkr_to_grid)  # just inside the 10 mm sphere
-    inside = vol.data[tuple(np.round(grid).astype(int).T)]
-    assert (inside > 0).mean() > 0.99
+    # rounding to a voxel centre moves a point by up to 0.87 mm, so stay 1 mm clear of the edge
+    inside = vol.data[tuple(np.round(to_grid(verts * 0.9, vol.tkr_to_grid)).astype(int).T)]
+    outside = vol.data[tuple(np.round(to_grid(verts * 1.1, vol.tkr_to_grid)).astype(int).T)]
+    assert (inside > 0).all()
+    assert (outside == 0).all()
