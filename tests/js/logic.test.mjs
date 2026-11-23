@@ -101,3 +101,7 @@ test("montageSlices can be limited to a slice range", () => {
   assert.ok(s[0] > 100 && s[19] < 199);
   assert.deepEqual(montageSlices(320, 20, 10, 14), [10, 11, 12, 13, 14]);
 });
+
+test("zoomTo refuses a canvas with no size (a hidden view)", () => {
+  assert.equal(zoomTo(0, 0, coronal, {h: 1, v: 1}, 10, 20, 50), null);
+});

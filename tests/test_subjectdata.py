@@ -48,3 +48,13 @@ def test_volume_with_another_shape_is_ignored(synth_subject):
 
 def test_thresholds_as_dict_lists_every_constant():
     assert thresholds.as_dict()["MARGIN_MM"] == 1.0 and len(thresholds.as_dict()) == 9
+
+
+@pytest.mark.parametrize("keep", [0, 0.5])
+def test_truncated_optional_file_becomes_none(synth_subject, keep):
+    write_qa_files(synth_subject)
+    path = synth_subject / "mri" / "ribbon.mgz"
+    raw = path.read_bytes()
+    path.write_bytes(raw[:int(len(raw) * keep)])  # e.g. recon-all still writing
+    data = load_subject_data(synth_subject, detect_pipeline(synth_subject))
+    assert data.ribbon is None and data.norm is not None

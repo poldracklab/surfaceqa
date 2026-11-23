@@ -6,7 +6,7 @@ import shutil
 from surfaceqa.build import build_all
 from surfaceqa.discover import find_subjects
 from surfaceqa.site import write_site
-from tests.synth import write_subject
+from tests.synth import write_qa_files, write_subject
 
 
 def test_index_lists_every_subject(qa):
@@ -124,8 +124,34 @@ def test_subject_whose_indicators_failed_says_so(qa_planted):
     folder = qa_planted / "subjects" / "fastsurfer__sub-02"
     run = json.loads((folder / "current.json").read_text())["run"]
     (folder / "runs" / run / "findings.json").unlink()
-    (folder / "qa_error.txt").write_text("boom")
+    (folder / "runs" / run / "qa_error.txt").write_text("boom")
     write_site(qa_planted)
     html = (folder / "index.html").read_text()
     assert "The automated indicators failed for this subject" in html
+    assert html.count("data-region=") == 9 and html.count("No indicator fired here. Look anyway") == 0
+    assert html.count("Look through this region") == 9
     assert "not computed" in (qa_planted / "index.html").read_text()
+
+
+def test_index_says_how_many_indicators_did_not_run(qa_planted):
+    html = (qa_planted / "index.html").read_text()
+    assert html.count("2 of 9 not run") == 2 and html.count("3 of 9 not run") == 1
+
+
+def test_subject_with_no_indicator_run_is_not_ranked_as_zero(qa):
+    html = (qa / "index.html").read_text()
+    assert html.count("not computed") == 3 and " of 2<" not in html
+    page = (qa / "subjects" / "fastsurfer__sub-01" / "index.html").read_text()
+    assert "No indicator could run for this subject" in page and "Suspicion score" not in page
+
+
+def test_subjects_are_ranked_within_their_source_folder(tmp_path):
+    for site in ("siteA-fs6", "siteB-fs8"):
+        write_qa_files(write_subject(tmp_path / site, pipeline="freesurfer", shape=(64, 64, 64)),
+                       pipeline="freesurfer")
+    qa = tmp_path / "qa"
+    build_all(find_subjects([tmp_path / "siteA-fs6", tmp_path / "siteB-fs8"]), qa)
+    write_site(qa)
+    html = (qa / "index.html").read_text()
+    assert html.count("1 of 1") == 2 and "of 2" not in html
+    assert "rank 1 of 1 in siteA-fs6" in (qa / "subjects" / "siteA-fs6__sub-01" / "index.html").read_text()

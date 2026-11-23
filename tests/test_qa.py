@@ -6,6 +6,7 @@ import pytest
 from surfaceqa import thresholds
 from surfaceqa.pipelines import detect_pipeline
 from surfaceqa.qa import write_findings
+from surfaceqa.scoring import suspicion_score
 from surfaceqa.subjectdata import load_subject_data
 from tests.synth import write_qa_files, write_subject
 
@@ -65,3 +66,13 @@ def test_findings_are_capped_and_the_cap_is_reported(tmp_path, monkeypatch):
     out = write_findings(data, tmp_path)
     ind = next(i for i in out["indicators"] if i["name"] == "ribbon_outside_brain")
     assert ind["n_findings"] == 1 and ind["dropped"] == 1
+
+
+def test_findings_record_how_the_score_was_computed(planted, tmp_path):
+    out = write_findings(load_subject_data(planted, detect_pipeline(planted)), tmp_path)
+    assert out["scoring"]["WEIGHT"]["topology"] == 0.2 and out["scoring"]["UNIT"] == 100.0
+    assert out["scoring"]["CAP"] == 10.0 and isinstance(out["qa_version"], int)
+
+
+def test_score_of_no_findings_is_a_float():
+    assert isinstance(suspicion_score([]), float)

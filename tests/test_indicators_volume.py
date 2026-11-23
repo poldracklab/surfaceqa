@@ -25,6 +25,17 @@ def clean() -> SubjectData:
                        seg_name="seg", nonbrain=None, nonbrain_names=[], parc=None, norm=norm, hemis={})
 
 
+def shifted_ball(voxel: float, shift_mm: float) -> SubjectData:
+    """Segmentation cortex ends at r = 14 mm; the ribbon's pial edge is shift_mm farther out (or in)."""
+    n = int(round(48 / voxel))
+    idx = np.indices((n, n, n))
+    r = np.sqrt(((idx - n // 2) ** 2).sum(axis=0)) * voxel
+    ribbon = np.select([r < 10, r < 14 + shift_mm], [2, 3], 0).astype(np.int32)
+    seg = np.select([r < 10, r < 14], [2, 1028], 0).astype(np.int32)
+    return SubjectData(voxel_sizes=(voxel,) * 3, ribbon=ribbon, hemi_ribbon=None, seg=seg,
+                       seg_name="seg", nonbrain=None, nonbrain_names=[], parc=None, norm=None, hemis={})
+
+
 def names_run(data):
     return {r.name: r for r in (ind(data) for ind in VOLUME_INDICATORS)}
 
@@ -113,3 +124,23 @@ def test_indicators_without_their_input_do_not_run(field, names):
     r = names_run(data)
     assert {n for n, res in r.items() if res.status == "not run"} >= names
     assert all(res.reason for res in r.values() if res.status == "not run")
+
+
+def test_one_voxel_shell_in_every_direction_is_not_a_finding():
+    data = clean()
+    shell = ndimage.binary_dilation(data.ribbon > 0, structure=np.ones((3, 3, 3))) & (data.ribbon == 0)
+    data.ribbon[shell] = 3
+    r = names_run(data)
+    assert r["ribbon_outside_brain"].findings == [] and r["missed_gray"].findings == []
+
+
+@pytest.mark.parametrize("voxel,shift", [(1.0, 1.0), (0.8, 0.8), (0.8, 1.0), (1.0, -1.0), (0.8, -0.8)])
+def test_pial_edge_off_by_about_a_voxel_is_not_a_finding(voxel, shift):
+    r = names_run(shifted_ball(voxel, shift))
+    assert r["ribbon_outside_brain"].findings == [] and r["missed_gray"].findings == []
+
+
+@pytest.mark.parametrize("voxel", [1.0, 0.8])
+def test_pial_edge_off_by_three_millimetres_is_a_finding(voxel):
+    assert names_run(shifted_ball(voxel, 3.0))["ribbon_outside_brain"].findings
+    assert names_run(shifted_ball(voxel, -3.0))["missed_gray"].findings

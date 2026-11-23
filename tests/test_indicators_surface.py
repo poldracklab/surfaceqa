@@ -74,3 +74,18 @@ def test_topology_not_run_without_prefix_surface():
     h = hemi()
     h.defect_labels = np.zeros(len(h.pial_grid), int)
     assert topology_defects(data_with(h)).status == "not run"
+
+
+def test_a_hemisphere_without_thickness_is_named():
+    lh, rh = hemi(), hemi()
+    rh.thickness = None
+    data = data_with(lh)
+    data.hemis["rh"] = rh
+    result = thick_patches(data)
+    assert result.status == "ran" and "rh" in result.reason and "not checked" in result.reason
+
+
+def test_a_cortex_label_that_does_not_fit_the_surface_does_not_crash():
+    h = hemi()
+    h.cortex = np.array([0, 1, 10 ** 7])
+    assert thick_patches(data_with(h)).status == "ran"

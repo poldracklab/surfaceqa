@@ -175,4 +175,49 @@ def test_qa_failure_keeps_the_viewer(tmp_path, monkeypatch):
     res = build_subject(ref, qa)
     assert res.status == "built" and load_meta(qa, ref.key) is not None
     assert load_findings(qa, ref.key) is None
-    assert "ZeroDivisionError" in (qa / "subjects" / ref.key / "qa_error.txt").read_text()
+    run_dir = qa / "subjects" / ref.key / "runs" / res.run
+    assert "ZeroDivisionError" in (run_dir / "qa_error.txt").read_text()
+
+
+def _qa_subject(tmp_path, with_files=True):
+    subj = write_subject(tmp_path / "fastsurfer", shape=(64, 64, 64))
+    if with_files:
+        write_qa_files(subj, plant={"ribbon_blob": ((0.0, 0.0, 16.0), 4.0)})
+    return subj, find_subjects([subj])[0], tmp_path / "qa"
+
+
+def test_qa_is_retried_after_a_failure(tmp_path, monkeypatch):
+    subj, ref, qa = _qa_subject(tmp_path)
+    with monkeypatch.context() as patch:
+        patch.setattr("surfaceqa.build.write_findings", lambda *a, **k: 1 / 0)
+        first = build_subject(ref, qa)
+    run_dir = qa / "subjects" / ref.key / "runs" / first.run
+    assert (run_dir / "qa_error.txt").exists() and load_findings(qa, ref.key) is None
+    second = build_subject(ref, qa)
+    assert second.status == "updated" and load_findings(qa, ref.key)["score"] > 0
+    assert not (run_dir / "qa_error.txt").exists()
+
+
+def test_qa_reruns_when_its_input_files_appear(tmp_path):
+    subj, ref, qa = _qa_subject(tmp_path, with_files=False)
+    build_subject(ref, qa)
+    assert load_findings(qa, ref.key)["findings"] == []
+    write_qa_files(subj, plant={"ribbon_blob": ((0.0, 0.0, 16.0), 4.0)})
+    assert build_subject(ref, qa).status == "updated"
+    assert load_findings(qa, ref.key)["score"] > 0
+
+
+def test_unchanged_subject_does_not_recompute_findings(tmp_path):
+    subj, ref, qa = _qa_subject(tmp_path)
+    first = build_subject(ref, qa)
+    path = qa / "subjects" / ref.key / "runs" / first.run / "findings.json"
+    stamp = path.stat().st_mtime_ns
+    assert build_subject(ref, qa).status == "unchanged" and path.stat().st_mtime_ns == stamp
+
+
+def test_findings_are_recomputed_when_the_indicator_code_version_changes(tmp_path, monkeypatch):
+    subj, ref, qa = _qa_subject(tmp_path)
+    build_subject(ref, qa)
+    monkeypatch.setattr("surfaceqa.qa.QA_VERSION", 10_000)
+    assert build_subject(ref, qa).status == "updated"
+    assert load_findings(qa, ref.key)["qa_version"] == 10_000
