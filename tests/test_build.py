@@ -9,7 +9,8 @@ from PIL import Image
 from surfaceqa.build import BUILD_FORMAT, build_all, build_subject, load_meta
 from surfaceqa.contours import unpack_slice
 from surfaceqa.discover import find_subjects
-from tests.synth import icosphere, write_subject
+from surfaceqa.qa import load_findings
+from tests.synth import icosphere, write_qa_files, write_subject
 
 
 @pytest.fixture
@@ -145,3 +146,33 @@ def test_anisotropic_non_lia_off_centre_subject_has_contours_on_the_anatomy(tmp_
 
         assert (sample(0.8) > 128).mean() > 0.98, plane
         assert (sample(1.2) < 128).mean() > 0.98, plane
+
+
+def test_build_writes_findings(tmp_path):
+    subj = write_subject(tmp_path / "fastsurfer", shape=(64, 64, 64))
+    write_qa_files(subj, plant={"ribbon_blob": ((0.0, 0.0, 16.0), 4.0)})
+    ref = find_subjects([subj])[0]
+    qa = tmp_path / "qa"
+    res = build_subject(ref, qa)
+    assert load_findings(qa, ref.key)["score"] > 0
+    meta = json.loads((qa / "subjects" / ref.key / "runs" / res.run / "meta.json").read_text())
+    assert meta["format"] == 2
+
+
+def test_subject_without_qa_files_builds_with_indicators_not_run(built):
+    ref, qa, _ = built
+    found = load_findings(qa, ref.key)
+    assert found["findings"] == [] and found["score"] == 0.0
+    assert all(i["status"] == "not run" for i in found["indicators"])
+
+
+def test_qa_failure_keeps_the_viewer(tmp_path, monkeypatch):
+    subj = write_subject(tmp_path / "fastsurfer")
+    write_qa_files(subj)
+    monkeypatch.setattr("surfaceqa.build.write_findings", lambda *a, **k: 1 / 0)
+    ref = find_subjects([subj])[0]
+    qa = tmp_path / "qa"
+    res = build_subject(ref, qa)
+    assert res.status == "built" and load_meta(qa, ref.key) is not None
+    assert load_findings(qa, ref.key) is None
+    assert "ZeroDivisionError" in (qa / "subjects" / ref.key / "qa_error.txt").read_text()
