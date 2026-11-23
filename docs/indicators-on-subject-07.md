@@ -22,13 +22,13 @@ surface indicators). "not run" means the inputs do not exist for that pipeline.
 | `ribbon_outside_brain` | 1 (26 mm³) | 4 (144 mm³) | 6 (1,632 mm³) |
 | `ribbon_in_nonbrain_mask` | not run | 0 | not run |
 | `ribbon_in_cerebellum` | 0 | 0 | 1 (22 mm³) |
-| `missed_gray` | 0 | 5 (290 mm³) | 35 places to look (5,313 mm³), not scored |
+| `missed_gray` | 0 | 3 (137 mm³), plus 2 places to look (153 mm³), not scored | 35 places to look (5,313 mm³), not scored |
 | `white_matter_in_ribbon` | 0 | 3 (96 mm³) | 40 (2,970 mm³) |
 | `bright_ribbon` | 0 | 0 | 0 |
 | `hemisphere_crossing` | 0 | 0 | 0 |
 | `thick_patches` | 6 (433 vertices) | 5 (614 vertices) | 4 (360 vertices) |
 | `topology_defects` | 2 (794 vertices) | 7 (3,196 vertices) | 13 (3,932 vertices) |
-| **Suspicion score** | **4.0** | **14.8** | **55.9** |
+| **Suspicion score** | **4.0** | **13.3** | **55.9** |
 
 These are the numbers after the noise margin was corrected and after the comparison with
 SynthSeg was set up properly (see "Changes made because of this"). Before the correction FastSurfer had 15 findings, recon-all 24 and NSD 74; the
@@ -201,10 +201,14 @@ FreeSurfer 6 reconstruction was available to try it on.
   error itself, and the FreeSurfer 6 atlas makes it badly. The reviewer's eyes, the fixed
   default locations per region, and the cohort thickness comparison planned for stage 5
   carry that error type.
-- The "places to look" exist only for atlas-made segmentations. For FastSurfer and
-  recon-all 8 the same disagreement is still reported as missed gray matter, although
-  two of the five such findings on the recon-all 8.2 reconstruction were sinus and
-  tentorium. Telling those apart automatically is not attempted.
+- For FastSurfer and recon-all 8 the same disagreement is named by where it is. Next to
+  the sinus, the cerebellum, the frontal midline or the outer edge of the brain it is an
+  unscored place to look, because there the tissue is usually sinus or dura and the
+  surface right (the two posterior ones on the recon-all 8.2 reconstruction, which were
+  first shown as "gray matter missed" and were plainly sinus). Under the frontal and
+  temporal lobes it stays a scored finding, worded "possible missed gray matter". The
+  split is by region only; a real miss of gray matter on the outer surface would be shown
+  as a place to look.
 - The crossing indicator should probably ignore the cluster minimum, or use a smaller
   one. Left unchanged until ratings say whether those scattered voxels matter.
 

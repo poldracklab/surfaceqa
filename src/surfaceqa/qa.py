@@ -15,9 +15,10 @@ from surfaceqa import scoring
 from surfaceqa.scoring import finding_points, suspicion_score
 from surfaceqa.subjectdata import SubjectData
 
-QA_VERSION = 6  # raise whenever indicators, regions or scoring change, so findings are recomputed
+QA_VERSION = 7  # raise whenever indicators, regions or scoring change, so findings are recomputed
 FINDINGS_FILE = "findings.json"
 ERROR_FILE = "qa_error.txt"
+NON_BRAIN_REGIONS = {"sinus", "cerebellum", "outer_edge", "frontal_midline"}
 VOXELS_FILE = "findings_voxels.bin"
 
 
@@ -28,7 +29,20 @@ def run_indicators(data: SubjectData) -> tuple[list[IndicatorResult], str]:
     for result in results:
         for finding in result.findings:
             finding.region = assign_region(finding, context)
+        relabel_by_region(result.findings)
     return results, context.reason
+
+
+def relabel_by_region(findings: list[Finding]) -> None:
+    """A segmentation's cortex beyond the pial surface means different things in different places.
+
+    Next to the sinus, the cerebellum or the outer edge of the brain it is usually sinus or
+    dura that the surface was right to leave out, so it becomes an unscored place to look.
+    Under the frontal and temporal lobes it stays a possible miss of gray matter.
+    """
+    for finding in findings:
+        if finding.kind == "gray_missed" and finding.region in NON_BRAIN_REGIONS:
+            finding.kind = "look_here"
 
 
 def _indicator_record(result: IndicatorResult) -> dict:

@@ -3,7 +3,7 @@
 from surfaceqa.regions import REGIONS
 
 WHAT = {
-    "pial_out": "pial too far out", "gray_missed": "gray matter missed",
+    "pial_out": "pial too far out", "gray_missed": "possible missed gray matter",
     "white_short": "white surface short", "crossing": "hemispheres overlap",
     "thickness": "thick patch", "topology": "topology defect",
     "look_here": "cortex label outside the pial surface",

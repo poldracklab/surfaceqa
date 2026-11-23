@@ -24,7 +24,7 @@
 <p class="note">No indicator fired here. Look anyway by scrolling through this region.</p>
 {% endif %}
 {% if section.hints %}
-<p class="note">Places to look (not counted in the score):</p>
+<p class="note">Places to look (not counted in the score): the segmentation labels this tissue as cortex and the surface leaves it out. Here that tissue is usually sinus or dura and the surface is usually right. Check that the pial surface nearby has not gone into it.</p>
 <div class="spots">{% for f in section.hints %}<button type="button" class="spot hint" data-finding="{{ f.id }}" data-grid="{{ f.grid | join(',') }}">{{ f.text }}</button>{% endfor %}</div>
 {% endif %}
 </article>
