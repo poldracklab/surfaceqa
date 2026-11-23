@@ -56,3 +56,21 @@ def test_cli_refuses_two_sources_that_would_share_a_key(tmp_path, capsys):
     assert main(["build", str(a), str(b), "--out", str(tmp_path / "qa")]) == 2
     assert "freesurfer__sub-01" in capsys.readouterr().err
     assert not (tmp_path / "qa").exists()
+
+
+def test_serve_accepts_blind(qa, monkeypatch):
+    import uvicorn
+
+    from surfaceqa import server
+
+    seen = {}
+    monkeypatch.setattr(uvicorn, "run", lambda app, **kwargs: seen.update(kwargs))
+    real = server.create_app
+    monkeypatch.setattr(server, "create_app",
+                        lambda qa_dir, blind=False: seen.update(blind=blind) or real(qa_dir, blind=blind))
+    from surfaceqa.cli import main
+
+    assert main(["serve", str(qa), "--blind"]) == 0
+    assert seen["blind"] is True
+    assert main(["serve", str(qa)]) == 0
+    assert seen["blind"] is False
