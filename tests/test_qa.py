@@ -54,7 +54,8 @@ def test_skipped_indicators_are_reported(tmp_path):
     write_qa_files(subj, pipeline="freesurfer")
     out = write_findings(load_subject_data(subj, detect_pipeline(subj)), tmp_path)
     skipped = {i["name"]: i["reason"] for i in out["indicators"] if i["status"] == "not run"}
-    assert "missed_gray" in skipped and "ribbon_in_nonbrain_mask" in skipped and all(skipped.values())
+    assert "ribbon_in_nonbrain_mask" in skipped and all(skipped.values())
+    assert "missed_gray" not in skipped  # one cortex class per hemisphere is enough to compare
 
 
 def test_findings_are_capped_and_the_cap_is_reported(tmp_path, monkeypatch):

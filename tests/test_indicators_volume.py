@@ -81,12 +81,36 @@ def test_missed_gray():
     assert f.kind == "gray_missed" and data.ribbon[f.grid] == 0
 
 
-def test_missed_gray_is_not_run_without_parcels():
-    data = clean()
+def generic_cortex(data: SubjectData) -> SubjectData:
+    """Cortex labelled as one class per hemisphere (3 / 42), as SynthSeg and aseg do."""
     data.seg[data.seg == 1028] = 3
     data.seg[data.seg == 2028] = 42
+    return data
+
+
+def test_missed_gray_runs_on_a_segmentation_with_one_cortex_class():
+    data = generic_cortex(clean())
+    assert names_run(data)["missed_gray"].findings == []
+    data.seg[30:36, 17:23, 17:23] = 3  # cortex where the ribbon has nothing
+    (f,) = names_run(data)["missed_gray"].findings
+    assert f.kind == "gray_missed" and data.ribbon[f.grid] == 0
+
+
+def test_missed_gray_is_not_run_when_the_segmentation_has_no_cortex_labels():
+    data = clean()
+    data.seg[data.seg >= 1000] = 0
     r = names_run(data)["missed_gray"]
-    assert r.status == "not run" and "parcels" in r.reason
+    assert r.status == "not run" and "no cortex labels" in r.reason
+
+
+def test_ribbon_over_csf_counts_as_outside_the_brain():
+    # SynthSeg labels the fluid around the brain as CSF (24), not as background
+    data = clean()
+    data.seg[data.seg == 0] = 24
+    assert names_run(data)["ribbon_outside_brain"].findings == []
+    data.ribbon[30:36, 17:23, 17:23] = 3
+    (f,) = names_run(data)["ribbon_outside_brain"].findings
+    assert f.kind == "pial_out" and 31 <= f.grid[0] <= 35
 
 
 def test_white_matter_in_ribbon():

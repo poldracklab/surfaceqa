@@ -112,7 +112,7 @@ def test_regions_without_findings_say_look_anyway_and_never_ok(qa_planted):
 
 def test_not_run_indicators_are_listed_with_reasons(qa_planted):
     html = (qa_planted / "subjects" / "freesurfer-8.2.0__sub-01" / "index.html").read_text()
-    assert "Not run for this subject:" in html and "missed_gray" in html and "parcels" in html
+    assert "Not run for this subject:" in html and "ribbon_in_nonbrain_mask" in html and "sinus or dura" in html
 
 
 def test_subject_without_indicator_inputs_says_what_was_not_run(qa):
@@ -135,7 +135,7 @@ def test_subject_whose_indicators_failed_says_so(qa_planted):
 
 def test_index_says_how_many_indicators_did_not_run(qa_planted):
     html = (qa_planted / "index.html").read_text()
-    assert html.count("2 of 9 not run") == 2 and html.count("3 of 9 not run") == 1
+    assert html.count("2 of 9 not run") == 3
 
 
 def test_subject_with_no_indicator_run_is_not_ranked_as_zero(qa):
