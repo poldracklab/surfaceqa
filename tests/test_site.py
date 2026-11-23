@@ -297,14 +297,14 @@ def test_a_reviewer_who_has_not_submitted_does_not_get_others_ratings(qa_reviewe
         # the grade itself cannot be searched for: every grade is an option of the grade menu
         assert "bob-note-quux" not in html and '<td class="grade">C+</td>' not in html
         assert "ann-note-xyzzy" not in html and "mark-note-plugh" not in html
-        assert "ann, bob" in html and "Other reviewers" not in html
+        assert "ann, bob" in html and "Submitted reviews" not in html
     record = _record(qa_reviewed, FIRST, _view("cat"))
     assert record["others"] == [] and record["final"] is None and record["comparison"] is None
 
 
 def test_a_reviewer_who_has_submitted_sees_the_others(qa_reviewed):
     html = _page(qa_reviewed, FIRST, "ann")
-    assert "Other reviewers" in html and "bob-note-quux" in html and "<td>C+ " in html
+    assert "Submitted reviews" in html and "bob-note-quux" in html and "<td>C+ " in html
     assert "ann-note-xyzzy" in html and "mark-note-plugh" in html
 
 

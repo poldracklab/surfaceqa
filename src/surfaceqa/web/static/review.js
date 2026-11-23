@@ -147,6 +147,7 @@ function queueSave(extra) {
 function changed() {
   state.dirty = true;
   showRemaining();
+  ui.missing.replaceChildren(); // the list from a refused submit is out of date now
   clearTimeout(state.timer);
   state.timer = setTimeout(queueSave, SAVE_DELAY);
 }

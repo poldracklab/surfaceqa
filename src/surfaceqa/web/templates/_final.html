@@ -1,7 +1,7 @@
 {% set c = subject.comparison %}
 {% if c %}
 <section class="reviews">
-<h2>{{ "Other reviewers" if view.reviewer else "Reviews" }}</h2>
+<h2>Submitted reviews</h2>
 <table class="subjects">
 <thead><tr><th>Item</th>{% for name in c.reviewers %}<th>{{ name }}</th>{% endfor %}{% if c.has_final %}<th>Final</th>{% endif %}</tr></thead>
 <tbody>
