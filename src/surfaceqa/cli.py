@@ -24,6 +24,9 @@ def _parser() -> argparse.ArgumentParser:
     serve.add_argument("qa_dir", type=Path)
     serve.add_argument("--host", default="127.0.0.1")
     serve.add_argument("--port", type=int, default=8765)
+    serve.add_argument("--blind", action="store_true",
+                       help="shuffle the subjects per reviewer and hide indicator results until "
+                            "the reviewer submits")
     return parser
 
 
@@ -69,13 +72,13 @@ def _build(args: argparse.Namespace) -> int:
 def _serve(args: argparse.Namespace) -> int:
     import uvicorn
 
-    from surfaceqa.server import create_app
+    from surfaceqa import server
 
     qa_dir = args.qa_dir.resolve()
     if not (qa_dir / "index.html").is_file():
         return _fail(f"{qa_dir} has no index.html; run `surfaceqa build` first")
     print(f"surfaceqa: http://{args.host}:{args.port}/")
-    uvicorn.run(create_app(qa_dir), host=args.host, port=args.port, log_level="warning")
+    uvicorn.run(server.create_app(qa_dir, blind=args.blind), host=args.host, port=args.port, log_level="warning")
     return 0
 
 
