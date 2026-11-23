@@ -25,10 +25,12 @@ class Finding:
 def _margin_box(margin_mm: float, voxel_sizes) -> tuple[int, ...]:
     """Size of the box, in voxels per axis, that reaches margin_mm in every direction.
 
-    The margin is counted in whole voxels along each axis and applies to diagonal
-    neighbours too, so a boundary that is off by one voxel in any direction is inside it.
+    The margin is counted in whole voxels along each axis (the nearest whole number, at
+    least one) and applies to diagonal neighbours too, so a boundary that is off by one
+    voxel in any direction is inside it. Rounding up instead would make the margin 1.6 mm
+    at 0.8 mm voxels, wider than the thinnest errors worth finding.
     """
-    steps = [int(np.ceil(margin_mm / size - EPS)) for size in voxel_sizes]
+    steps = [max(1, int(np.floor(margin_mm / size + 0.5))) for size in voxel_sizes]
     return tuple(2 * s + 1 for s in steps)
 
 

@@ -15,7 +15,7 @@ from surfaceqa import scoring
 from surfaceqa.scoring import finding_points, suspicion_score
 from surfaceqa.subjectdata import SubjectData
 
-QA_VERSION = 2  # raise whenever indicators, regions or scoring change, so findings are recomputed
+QA_VERSION = 3  # raise whenever indicators, regions or scoring change, so findings are recomputed
 FINDINGS_FILE = "findings.json"
 ERROR_FILE = "qa_error.txt"
 VOXELS_FILE = "findings_voxels.bin"
