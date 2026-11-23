@@ -175,11 +175,21 @@ def run_file(request: Request, key: str, run: str, name: str):
     return FileResponse(path)
 
 
+class RevalidatedFiles(StaticFiles):
+    """The tool's scripts and styles. The browser asks before using a cached copy, so an
+    upgraded server is never driven by the scripts of the version before."""
+
+    def file_response(self, *args, **kwargs):
+        response = super().file_response(*args, **kwargs)
+        response.headers["cache-control"] = "no-cache"
+        return response
+
+
 def create_app(qa_dir: Path, blind: bool = False) -> FastAPI:
     app = FastAPI(title="surfaceqa", docs_url=None, redoc_url=None, openapi_url=None)
     app.state.qa_dir = Path(qa_dir)
     app.state.blind = blind
     app.include_router(router)
     # the scripts of this version of the tool, not the copy an earlier build left in the QA directory
-    app.mount("/static", StaticFiles(packages=[("surfaceqa", "web/static")]), name="static")
+    app.mount("/static", RevalidatedFiles(packages=[("surfaceqa", "web/static")]), name="static")
     return app
