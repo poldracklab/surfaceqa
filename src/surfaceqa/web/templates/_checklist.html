@@ -23,5 +23,9 @@
 {% else %}
 <p class="note">No indicator fired here. Look anyway by scrolling through this region.</p>
 {% endif %}
+{% if section.hints %}
+<p class="note">Places to look (not counted in the score):</p>
+<div class="spots">{% for f in section.hints %}<button type="button" class="spot hint" data-finding="{{ f.id }}" data-grid="{{ f.grid | join(',') }}">{{ f.text }}</button>{% endfor %}</div>
+{% endif %}
 </article>
 {% endfor %}

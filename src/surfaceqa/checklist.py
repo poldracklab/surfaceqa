@@ -6,7 +6,14 @@ WHAT = {
     "pial_out": "pial too far out", "gray_missed": "gray matter missed",
     "white_short": "white surface short", "crossing": "hemispheres overlap",
     "thickness": "thick patch", "topology": "topology defect",
+    "look_here": "cortex label outside the pial surface",
 }
+HINT_KIND = "look_here"
+
+
+def scored_findings(found: dict) -> list[dict]:
+    """Findings that count as possible errors, leaving out the places to look."""
+    return [f for f in found["findings"] if f["kind"] != HINT_KIND]
 
 
 def finding_text(finding: dict) -> str:
@@ -19,7 +26,9 @@ def finding_text(finding: dict) -> str:
 def _section(region, findings: list[dict], defaults: dict) -> dict:
     mine = [{**f, "text": finding_text(f)} for f in findings if f["region"] == region.id]
     return {"id": region.id, "title": region.title, "look_for": region.look_for,
-            "findings": mine, "defaults": defaults.get(region.id, [])}
+            "findings": [f for f in mine if f["kind"] != HINT_KIND],
+            "hints": [f for f in mine if f["kind"] == HINT_KIND],
+            "defaults": defaults.get(region.id, [])}
 
 
 def checklist_sections(found: dict | None) -> list[dict]:

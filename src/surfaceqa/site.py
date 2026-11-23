@@ -10,7 +10,7 @@ from jinja2 import Environment, PackageLoader, select_autoescape
 
 from surfaceqa.build import load_meta
 from surfaceqa.layout import current_run_dir
-from surfaceqa.checklist import checklist_sections, finding_text
+from surfaceqa.checklist import checklist_sections, finding_text, scored_findings
 from surfaceqa.qa import load_findings
 from surfaceqa.regions import REGIONS
 from surfaceqa.scoring import rank_within_pipeline
@@ -64,13 +64,14 @@ def _qa_fields(qa_dir: Path, folder: Path) -> dict:
         return {"qa": None, "score": None, "qa_failed": _qa_failed(qa_dir, folder.name),
                 "sections": checklist_sections(None)}
     titles = {region.id: region.title for region in REGIONS}
-    top = found["findings"][0] if found["findings"] else None
+    scored = scored_findings(found)
+    top = scored[0] if scored else None
     largest = f"{finding_text(top)} · {titles[top['region']]}" if top else ""
     not_run = [i for i in found["indicators"] if i["status"] == "not run"]
     partial = [i for i in found["indicators"] if i["status"] == "ran" and i["reason"]]
     any_ran = len(not_run) < len(found["indicators"])
     return {"qa": found, "score": found["score"] if any_ran else None, "qa_failed": False,
-            "largest": largest, "not_run": not_run, "partial": partial,
+            "largest": largest, "n_findings": len(scored), "not_run": not_run, "partial": partial,
             "n_indicators": len(found["indicators"]), "sections": checklist_sections(found)}
 
 

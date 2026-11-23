@@ -4,6 +4,7 @@ import * as L from "./logic.js";
 const LINE_WIDTH = 1.5;
 const PRELOAD = 3;
 const FINDING_RGB = "0, 229, 255";
+const HINT_RGB = "255, 170, 0"; // places to look, which are not counted as findings
 const WHEEL_STEP = 40; // wheel delta that moves one slice
 const DRAG_THRESHOLD = 3; // pixels of movement before a press becomes a pan
 
@@ -147,7 +148,7 @@ function findingsOnSlice(v, i) {
     const hits = [];
     for (const finding of state.findings) {
       const points = L.findingVoxelsOnSlice(state.voxels, finding, v.plane, i);
-      if (points.length) hits.push({id: finding.id, points});
+      if (points.length) hits.push({id: finding.id, hint: finding.kind === "look_here", points});
     }
     v.findingSlices.set(i, hits);
   }
@@ -159,7 +160,8 @@ function drawFindings(v, i) {
   const [x0, y0] = toCanvas(v, -0.5, -0.5);
   const [x1, y1] = toCanvas(v, 0.5, 0.5);
   for (const hit of findingsOnSlice(v, i)) {
-    v.ctx.fillStyle = `rgba(${FINDING_RGB}, ${hit.id === state.highlight ? 0.7 : 0.35})`;
+    const rgb = hit.hint ? HINT_RGB : FINDING_RGB;
+    v.ctx.fillStyle = `rgba(${rgb}, ${hit.id === state.highlight ? 0.7 : 0.35})`;
     for (const [x, y] of hit.points) {
       const [px, py] = toCanvas(v, x - 0.5, y - 0.5);
       v.ctx.fillRect(px, py, x1 - x0, y1 - y0);

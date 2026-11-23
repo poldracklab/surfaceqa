@@ -5,7 +5,7 @@ from dataclasses import dataclass
 import numpy as np
 from scipy import ndimage
 
-KINDS = ("pial_out", "gray_missed", "white_short", "crossing", "thickness", "topology")
+KINDS = ("pial_out", "gray_missed", "white_short", "crossing", "thickness", "topology", "look_here")
 FULL_CONNECTIVITY = np.ones((3, 3, 3), dtype=bool)
 EPS = 1e-6  # distances are sums of voxel sizes; compare them with a little slack
 

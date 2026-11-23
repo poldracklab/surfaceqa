@@ -3,7 +3,8 @@
 from surfaceqa.findings import Finding
 
 WEIGHT = {"pial_out": 1.0, "gray_missed": 1.0, "white_short": 1.0, "crossing": 2.0,
-          "thickness": 0.5, "topology": 0.2}  # thickness repeats volume findings; defects are mostly routine
+          "thickness": 0.5, "topology": 0.2,
+          "look_here": 0.0}  # thickness repeats volume findings; defects are mostly routine
 UNIT = 100.0  # mm^3, or vertices, per point
 CAP = 10.0  # one huge finding should not drown the rest
 

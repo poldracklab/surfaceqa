@@ -22,7 +22,7 @@ surface indicators). "not run" means the inputs do not exist for that pipeline.
 | `ribbon_outside_brain` | 1 (26 mm³) | 4 (144 mm³) | 6 (1,632 mm³) |
 | `ribbon_in_nonbrain_mask` | not run | 0 | not run |
 | `ribbon_in_cerebellum` | 0 | 0 | 1 (22 mm³) |
-| `missed_gray` | 0 | 5 (290 mm³) | not run |
+| `missed_gray` | 0 | 5 (290 mm³) | 35 places to look (5,313 mm³), not scored |
 | `white_matter_in_ribbon` | 0 | 3 (96 mm³) | 40 (2,970 mm³) |
 | `bright_ribbon` | 0 | 0 | 0 |
 | `hemisphere_crossing` | 0 | 0 | 0 |
@@ -152,8 +152,8 @@ Two lists that matter:
 - **CSF counts as outside the brain** (label 24, as well as background) in
   `ribbon_outside_brain`.
 - **`missed_gray` runs for any network-made segmentation with cortex labels**, not only
-  FastSurfer's parcels, and is not run against atlas-made ones (recon-all before
-  version 8).
+  FastSurfer's parcels. Against atlas-made ones (recon-all before version 8) the same
+  disagreement becomes unscored places to look.
 - **No other threshold was changed.** One subject is not grounds for tuning
   `MIN_CLUSTER_MM3` or `BRIGHT_MAD`, and the misses above are mostly not threshold
   problems.
@@ -182,8 +182,14 @@ Checked on 2026-11-23, after the first version of this document claimed otherwis
 Against FreeSurfer 6's atlas segmentation the same `missed_gray` comparison gave 35
 findings (5,313 mm³) on the NSD reconstruction. The four largest are sagittal sinus, dura
 above the brain, and tissue next to the cerebellum, all labelled cortex by the atlas
-segmentation and all correctly excluded by the hand-edited surface. The indicator is
-therefore not run against atlas-made segmentations.
+segmentation and all correctly excluded by the hand-edited surface. Against atlas-made
+segmentations these are therefore not reported as errors. They are listed in each region
+as "places to look (not counted in the score)" and drawn in amber: 35 of them on the NSD
+reconstruction (25 filed under the outer edge, 5 next to the cerebellum, 2 inferior
+temporal, 2 frontal midline, 1 sinus). The reasoning is that tissue an atlas takes for
+cortex is tissue an unedited pial surface is likely to take for cortex too. Whether
+reviewers find errors at these places more often than elsewhere is not known; no unedited
+FreeSurfer 6 reconstruction was available to try it on.
 
 ## What this suggests for later stages
 
@@ -195,9 +201,10 @@ therefore not run against atlas-made segmentations.
   error itself, and the FreeSurfer 6 atlas makes it badly. The reviewer's eyes, the fixed
   default locations per region, and the cohort thickness comparison planned for stage 5
   carry that error type.
-- The places where a segmentation labels sinus or dura as cortex are, incidentally, the
-  places where an unedited pial surface is most likely to go wrong. That could be turned
-  into "look here" locations; it is not built.
+- The "places to look" exist only for atlas-made segmentations. For FastSurfer and
+  recon-all 8 the same disagreement is still reported as missed gray matter, although
+  two of the five such findings on the recon-all 8.2 reconstruction were sinus and
+  tentorium. Telling those apart automatically is not attempted.
 - The crossing indicator should probably ignore the cluster minimum, or use a smaller
   one. Left unchanged until ratings say whether those scattered voxels matter.
 

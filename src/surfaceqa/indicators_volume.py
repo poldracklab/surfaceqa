@@ -23,8 +23,9 @@ MISSING = {
     "hemi_ribbon": "no lh.ribbon.mgz and rh.ribbon.mgz",
 }
 NO_CORTEX = "segmentation has no cortex labels"
-ATLAS_SEG = ("the segmentation was made from an atlas (recon-all before version 8), "
-             "which labels sinus and dura as cortex")
+ATLAS_SEG = ("the segmentation was made from an atlas (recon-all before version 8), which labels "
+             "sinus and dura as cortex; where it has cortex outside the pial surface is listed "
+             "as places to look, not as errors")
 
 
 @dataclass
@@ -86,14 +87,22 @@ def missed_gray(data: SubjectData) -> IndicatorResult:
     name, kind = "missed_gray", "gray_missed"
     if reason := _missing(data, "ribbon", "seg"):
         return not_run(name, kind, reason)
-    if data.seg_method == "atlas":
-        return not_run(name, kind, ATLAS_SEG)
     seg_cortex = (data.seg >= 1000) | np.isin(data.seg, SEG_CORTEX)
     if not seg_cortex.any():
         return not_run(name, kind, NO_CORTEX)
-    missed = farther_than(seg_cortex & (data.ribbon == 0), data.ribbon > 0,
-                          thresholds.MARGIN_MM, data.voxel_sizes)
-    return _result(name, kind, missed, data)
+    beyond_pial = farther_than(seg_cortex & (data.ribbon == 0), data.ribbon > 0,
+                               thresholds.MARGIN_MM, data.voxel_sizes)
+    if data.seg_method == "atlas":
+        return _places_to_look(name, beyond_pial, data)
+    return _result(name, kind, beyond_pial, data)
+
+
+def _places_to_look(name: str, mask: np.ndarray, data: SubjectData) -> IndicatorResult:
+    """Against an atlas segmentation the same disagreement marks sinus and dura, where an
+    unedited pial surface most often goes too far. Shown to the reviewer; never scored."""
+    result = _result(name, "look_here", mask, data)
+    result.reason = ATLAS_SEG
+    return result
 
 
 def white_matter_in_ribbon(data: SubjectData) -> IndicatorResult:

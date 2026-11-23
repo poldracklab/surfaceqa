@@ -64,3 +64,4 @@ td.muted { color: var(--muted); }
 .layouts .layout:first-child { border-radius: 4px 0 0 4px; margin-left: 0; }
 .layouts .layout:last-child { border-radius: 0 4px 4px 0; }
 .layouts .layout.active { background: #2f3a21; border-color: #ffe100; position: relative; }
+.spot.hint { border-color: #b97a00; }

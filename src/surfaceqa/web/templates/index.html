@@ -7,7 +7,7 @@
 <tbody>
 {% for s in subjects %}
 <tr><td><a href="{{ s.href }}">{{ s.name }}</a></td><td>{{ s.source }}</td><td>{{ s.pipeline_label }}</td><td class="status">{{ s.status }}</td>
-{%- if s.score is not none %}<td class="num">{{ s.score }}</td><td class="num">{{ s.rank.rank }} of {{ s.rank.of }}</td><td class="num">{{ s.qa.findings | length }}</td><td>{{ s.largest }}</td><td class="muted">{% if s.not_run %}{{ s.not_run | length }} of {{ s.n_indicators }} not run{% else %}all run{% endif %}</td>
+{%- if s.score is not none %}<td class="num">{{ s.score }}</td><td class="num">{{ s.rank.rank }} of {{ s.rank.of }}</td><td class="num">{{ s.n_findings }}</td><td>{{ s.largest }}</td><td class="muted">{% if s.not_run %}{{ s.not_run | length }} of {{ s.n_indicators }} not run{% else %}all run{% endif %}</td>
 {%- else %}<td colspan="5" class="muted">not computed</td>{% endif %}</tr>
 {% endfor %}
 </tbody>
