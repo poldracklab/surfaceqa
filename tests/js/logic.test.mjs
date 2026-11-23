@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import {
   sliceSegments, gridToScreen, screenToGrid, clampSlice, crosshairs, initialCursor, fit, zoomAt,
-  isHideKey,
+  isHideKey, findingVoxelsOnSlice, montageSlices, zoomTo,
 } from "../../src/surfaceqa/web/static/logic.js";
 
 const coronal = {axis: 1, h_axis: 0, v_axis: 2, h_flip: true, v_flip: true, width: 32, height: 40, n_slices: 48};
@@ -58,4 +58,26 @@ test("isHideKey is the plain s key only", () => {
   assert.equal(isHideKey({code: "KeyS", key: "s", metaKey: true}), false); // cmd+s is not "hide"
   assert.equal(isHideKey({code: "KeyS", key: "s", ctrlKey: true}), false);
   assert.equal(isHideKey({code: "KeyA", key: "a"}), false);
+});
+
+test("findingVoxelsOnSlice picks the voxels on the slice, in screen coordinates", () => {
+  const voxels = new Uint16Array([3, 24, 39, 4, 24, 39, 3, 25, 39, 9, 9, 9]);
+  assert.deepEqual(findingVoxelsOnSlice(voxels, {voxel_start: 0, voxel_count: 3}, coronal, 24), [[28, 0], [27, 0]]);
+  assert.deepEqual(findingVoxelsOnSlice(voxels, {voxel_start: 3, voxel_count: 1}, coronal, 24), []);
+});
+
+test("montageSlices are evenly spaced inside the volume", () => {
+  const s = montageSlices(320, 20);
+  assert.equal(s.length, 20);
+  assert.equal(s[0], 15);
+  assert.equal(s[19], 304);
+  assert.ok(s.every((v, i) => i === 0 || v > s[i - 1]));
+  assert.deepEqual(montageSlices(5, 20), [0, 1, 2, 3, 4]);
+});
+
+test("zoomTo centres the point and sets the field of view", () => {
+  const v = zoomTo(600, 400, coronal, {h: 0.8, v: 0.8}, 10, 20, 50);
+  assert.equal(v.scale, 8); // 400 px / 50 mm
+  assert.equal(v.dx + (10 + 0.5) * 0.8 * v.scale, 300);
+  assert.equal(v.dy + (20 + 0.5) * 0.8 * v.scale, 200);
 });

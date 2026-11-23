@@ -1,4 +1,6 @@
+import html as html_lib
 import json
+import re
 import shutil
 
 from surfaceqa.build import build_all
@@ -80,3 +82,50 @@ def test_subject_names_are_escaped_on_the_subject_page(tmp_path):
     build_all(find_subjects([subj]), qa)
     write_site(qa)
     assert "<b>x" not in (qa / "subjects" / "src__sub-<b>x" / "index.html").read_text()
+
+
+def test_index_orders_by_score_within_pipeline(qa_planted):
+    html = (qa_planted / "index.html").read_text()
+    rows = re.findall(r'href="subjects/([^/]+)/index.html"', html)
+    assert rows == ["fastsurfer__sub-01", "fastsurfer__sub-02", "freesurfer-8.2.0__sub-01"]
+    assert "1 of 2" in html and "2 of 2" in html and "1 of 1" in html
+    assert "pial too far out" in html and "it does not mean a subject is good or bad" in html
+
+
+def test_subject_page_has_checklist_in_order(qa_planted):
+    html = html_lib.unescape((qa_planted / "subjects" / "fastsurfer__sub-01" / "index.html").read_text())
+    titles = ["Bird's-eye view", "T1 quality", "Sagittal and transverse sinus",
+              "Cortex / cerebellum interface", "Frontal midline", "Inferior frontal and orbitofrontal",
+              "Inferior temporal, near the ear canal", "Medial temporal, hippocampus",
+              "Outer edge of the brain", "White surface", "Hemispheres crossing"]
+    positions = [html.index(f">{title}<") for title in titles]
+    assert positions == sorted(positions)
+    assert "Suspicion score" in html and "a low score does not mean the surfaces are correct" in html
+    assert html.count("data-finding=") >= 1 and "pial too far out" in html
+
+
+def test_regions_without_findings_say_look_anyway_and_never_ok(qa_planted):
+    html = (qa_planted / "subjects" / "fastsurfer__sub-02" / "index.html").read_text()
+    assert html.count("No indicator fired here. Look anyway") == 9
+    assert not re.search(r"\bOK\b|no problems|looks fine|passed", html, re.I)
+
+
+def test_not_run_indicators_are_listed_with_reasons(qa_planted):
+    html = (qa_planted / "subjects" / "freesurfer-8.2.0__sub-01" / "index.html").read_text()
+    assert "Not run for this subject:" in html and "missed_gray" in html and "parcels" in html
+
+
+def test_subject_without_indicator_inputs_says_what_was_not_run(qa):
+    html = (qa / "subjects" / "fastsurfer__sub-01" / "index.html").read_text()
+    assert "Not run for this subject:" in html and "no ribbon.mgz" in html
+
+
+def test_subject_whose_indicators_failed_says_so(qa_planted):
+    folder = qa_planted / "subjects" / "fastsurfer__sub-02"
+    run = json.loads((folder / "current.json").read_text())["run"]
+    (folder / "runs" / run / "findings.json").unlink()
+    (folder / "qa_error.txt").write_text("boom")
+    write_site(qa_planted)
+    html = (folder / "index.html").read_text()
+    assert "The automated indicators failed for this subject" in html
+    assert "not computed" in (qa_planted / "index.html").read_text()
