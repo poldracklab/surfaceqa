@@ -1,0 +1,23 @@
+{
+  "version": 1,
+  "region_scale": [
+    {"id": "none", "key": "1", "label": "None", "anchor": "No error seen in this region."},
+    {"id": "minor", "key": "2", "label": "Minor", "anchor": "Visible but confined; would not change an analysis much. Leave it."},
+    {"id": "major", "key": "3", "label": "Major (needs fix)", "anchor": "A careful analyst would edit or exclude."}
+  ],
+  "pass_scale": [
+    {"id": "ok", "key": "1", "label": "OK", "anchor": "Nothing that affects the surfaces."},
+    {"id": "concern", "key": "2", "label": "Concern", "anchor": "A problem worth a note; the subject is still usable."},
+    {"id": "exclude", "key": "3", "label": "Consider excluding", "anchor": "The image or reconstruction is not usable as it is."}
+  ],
+  "tie_rule": "When torn between two levels, choose the lower and write a note.",
+  "grades": ["A+", "A", "A-", "B+", "B", "B-", "C+", "C", "C-", "D+", "D", "D-", "F"],
+  "mark_kinds": [
+    {"id": "pial_out", "label": "pial too far out"},
+    {"id": "gray_missed", "label": "gray matter missed"},
+    {"id": "white_short", "label": "white surface short of white matter"},
+    {"id": "white_past", "label": "white surface past white matter"},
+    {"id": "crossing", "label": "hemispheres crossing"},
+    {"id": "topology", "label": "topology defect"}
+  ]
+}
