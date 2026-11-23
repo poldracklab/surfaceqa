@@ -135,7 +135,7 @@ def test_subject_whose_indicators_failed_says_so(qa_planted):
 
 def test_index_says_how_many_indicators_did_not_run(qa_planted):
     html = (qa_planted / "index.html").read_text()
-    assert html.count("2 of 9 not run") == 2 and html.count("3 of 9 not run") == 1
+    assert html.count("2 of 9 not run") == 3
 
 
 def test_subject_with_no_indicator_run_is_not_ranked_as_zero(qa):
@@ -176,3 +176,17 @@ def test_whole_brain_pass_is_a_single_large_scrollable_view(qa_planted):
     aside = html[html.index('<aside id="checklist"'):html.index("</aside>")]
     assert ">Scroll through all slices<" in aside and ">Scroll through all slices, T1 only<" in aside
     assert "n / p: next / previous location" in viewer
+
+
+def test_places_to_look_are_listed_separately_and_not_counted(tmp_path):
+    subj = write_subject(tmp_path / "fs6", pipeline="freesurfer", shape=(64, 64, 64))
+    write_qa_files(subj, pipeline="freesurfer", plant={"seg_blob": ((0.0, 16.0, 0.0), 4.0)})
+    qa = tmp_path / "qa"
+    build_all(find_subjects([subj]), qa)
+    write_site(qa)
+    page = html_lib.unescape((qa / "subjects" / "fs6__sub-01" / "index.html").read_text())
+    assert "Places to look (not counted in the score):" in page
+    assert re.search(r'class="spot hint"[^>]*>cortex label outside the pial surface · \d+ mm³<', page)
+    assert "Suspicion score 0.0" in page
+    row = (qa / "index.html").read_text()
+    assert re.search(r'<td class="num">0</td><td></td>', row)  # no findings, nothing "largest"

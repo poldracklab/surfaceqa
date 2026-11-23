@@ -171,11 +171,22 @@ def test_pial_edge_off_by_millimetres_is_a_finding(voxel, shift):
     assert names_run(shifted_ball(voxel, -shift))["missed_gray"].findings
 
 
-def test_missed_gray_is_not_run_against_an_atlas_made_segmentation():
-    # FreeSurfer 6's atlas segmentation labels sinus and dura as cortex: on NSD subject 07 it
-    # produced 35 "missed gray" findings where the hand-edited surface was right to stop.
+def test_atlas_segmentation_gives_places_to_look_not_findings():
+    # FreeSurfer 6's atlas segmentation labels sinus and dura as cortex: on NSD subject 07 its
+    # cortex beyond the pial surface was sinus and dura that the edited surface was right to
+    # exclude. Those are where an unedited pial surface most often goes wrong, so they are
+    # offered as places to look and never counted as errors.
     data = generic_cortex(clean())
     data.seg_method = "atlas"
     data.seg[30:36, 17:23, 17:23] = 3
     r = names_run(data)["missed_gray"]
-    assert r.status == "not run" and "atlas" in r.reason and r.findings == []
+    (f,) = r.findings
+    assert r.status == "ran" and "atlas" in r.reason
+    assert f.kind == "look_here" and data.ribbon[f.grid] == 0
+
+
+def test_network_segmentation_still_gives_missed_gray_findings():
+    data = generic_cortex(clean())
+    data.seg[30:36, 17:23, 17:23] = 3
+    (f,) = names_run(data)["missed_gray"].findings
+    assert f.kind == "gray_missed"

@@ -25,3 +25,9 @@ def test_rank_within_pipeline():
                                   "c": ("freesurfer", 1.0), "d": ("fastsurfer", 5.0)})
     assert ranks["b"] == {"rank": 1, "of": 3} and ranks["a"]["rank"] == 2 and ranks["d"]["rank"] == 2
     assert ranks["c"] == {"rank": 1, "of": 1}
+
+
+def test_places_to_look_do_not_count_towards_the_score():
+    hint = Finding("x", "look_here", (0, 0, 0), 900.0, 900)
+    assert finding_points(hint) == 0.0
+    assert suspicion_score([hint, Finding("x", "pial_out", (0, 0, 0), 100.0, 1)]) == 1.0

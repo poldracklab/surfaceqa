@@ -155,6 +155,11 @@ def _plant_ribbon_blob(ribbon: np.ndarray, coords: np.ndarray, centre, radius: f
     ribbon[blob] = np.where(coords[..., 0] < 0, 3, 42)[blob]
 
 
+def _plant_seg_blob(seg: np.ndarray, ribbon: np.ndarray, coords: np.ndarray, centre, radius: float) -> None:
+    blob = (np.linalg.norm(coords - np.asarray(centre), axis=-1) <= radius) & (ribbon == 0)
+    seg[blob] = np.where(coords[..., 0] < 0, 3, 42)[blob]
+
+
 def _save_like(img, data: np.ndarray, path: Path) -> None:
     nib.save(nib.MGHImage(data, img.affine), path)
 
@@ -195,7 +200,9 @@ def write_qa_files(subj: Path, pipeline: str = "fastsurfer", plant: dict | None 
     _save_like(img, ribbon.astype(np.uint8), mri / "ribbon.mgz")
     _save_like(img, np.isin(ribbon, (2, 3)).astype(np.uint8), mri / "lh.ribbon.mgz")
     _save_like(img, np.isin(ribbon, (41, 42)).astype(np.uint8), mri / "rh.ribbon.mgz")
-    seg = parcels if pipeline == "fastsurfer" else _tissue(coords, 3, 42)
+    seg = parcels.copy() if pipeline == "fastsurfer" else _tissue(coords, 3, 42)
+    if "seg_blob" in plant:  # cortex in the segmentation where the ribbon has none
+        _plant_seg_blob(seg, ribbon, coords, *plant["seg_blob"])
     _save_like(img, seg, mri / SEG_NAME[pipeline])
     _save_like(img, parcels, mri / "aparc.DKTatlas+aseg.mgz")
     norm = np.select([np.isin(parcels, (2, 41)), parcels > 0], [110, 70], 0).astype(np.uint8)

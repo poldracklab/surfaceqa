@@ -55,7 +55,7 @@ def test_skipped_indicators_are_reported(tmp_path):
     out = write_findings(load_subject_data(subj, detect_pipeline(subj)), tmp_path)
     skipped = {i["name"]: i["reason"] for i in out["indicators"] if i["status"] == "not run"}
     assert "ribbon_in_nonbrain_mask" in skipped and all(skipped.values())
-    assert "atlas" in skipped["missed_gray"]  # the synthetic recon-all subject has no SynthSeg file
+    assert "missed_gray" not in skipped  # against an atlas segmentation it gives places to look
 
 
 def test_findings_are_capped_and_the_cap_is_reported(tmp_path, monkeypatch):
@@ -77,3 +77,13 @@ def test_findings_record_how_the_score_was_computed(planted, tmp_path):
 
 def test_score_of_no_findings_is_a_float():
     assert isinstance(suspicion_score([]), float)
+
+
+def test_places_to_look_come_after_findings_and_leave_the_score_alone(tmp_path):
+    subj = write_subject(tmp_path / "fs6", pipeline="freesurfer", shape=(64, 64, 64))
+    write_qa_files(subj, pipeline="freesurfer",
+                   plant={"ribbon_blob": BLOB, "seg_blob": ((0.0, 16.0, 0.0), 4.0)})
+    out = write_findings(load_subject_data(subj, detect_pipeline(subj)), tmp_path)
+    kinds = [f["kind"] for f in out["findings"]]
+    assert kinds == ["pial_out", "look_here"]
+    assert out["score"] == round(out["findings"][0]["points"], 1) and out["findings"][1]["points"] == 0
