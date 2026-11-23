@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import {
   sliceSegments, gridToScreen, screenToGrid, clampSlice, crosshairs, initialCursor, fit, zoomAt,
-  isHideKey, findingVoxelsOnSlice, zoomTo, resizeView, stepIndex, visiblePlanes,
+  isHideKey, findingVoxelsOnSlice, zoomTo, resizeView, stepIndex, visiblePlanes, contourBounds, fitBox,
 } from "../../src/surfaceqa/web/static/logic.js";
 
 const coronal = {axis: 1, h_axis: 0, v_axis: 2, h_flip: true, v_flip: true, width: 32, height: 40, n_slices: 48};
@@ -97,4 +97,22 @@ test("visiblePlanes: all three, or the one chosen", () => {
   assert.deepEqual(visiblePlanes("three"), ["coronal", "sagittal", "axial"]);
   assert.deepEqual(visiblePlanes("sagittal"), ["sagittal"]);
   assert.deepEqual(visiblePlanes("nonsense"), ["coronal", "sagittal", "axial"]);
+});
+
+test("contourBounds is the box around every contour of a plane", () => {
+  const q = (c) => (c + 0.5) * 64;
+  const u = new Uint16Array([q(10), q(20), q(12), q(22), q(29), q(39), q(25), q(30)]);
+  const index = {quant: 64, surfaces: {"lh.pial": [0, 1, 1], "rh.white": [1, 1, 2]}};
+  assert.deepEqual(contourBounds(u.buffer, index), {x0: 10, y0: 20, x1: 29, y1: 39});
+  assert.equal(contourBounds(new ArrayBuffer(0), {quant: 64, surfaces: {"lh.pial": [0, 0]}}), null);
+});
+
+test("fitBox fills the view with a box, centred, with padding", () => {
+  const tight = fitBox(600, 400, {h: 1, v: 1}, {x0: 10, y0: 20, x1: 29, y1: 39}, 0);
+  assert.equal(tight.scale, 20); // a 20 mm box in the 400 px dimension
+  assert.equal(tight.dx + (19.5 + 0.5) * tight.scale, 300); // box centre at the view centre
+  assert.equal(tight.dy + (29.5 + 0.5) * tight.scale, 200);
+  const padded = fitBox(600, 400, {h: 1, v: 1}, {x0: 10, y0: 20, x1: 29, y1: 39}, 0.125);
+  assert.equal(padded.scale, 16); // 12.5% of the box left free on every side
+  assert.equal(fitBox(0, 400, {h: 1, v: 1}, {x0: 0, y0: 0, x1: 1, y1: 1}, 0), null);
 });
