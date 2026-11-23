@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import {
   sliceSegments, gridToScreen, screenToGrid, clampSlice, crosshairs, initialCursor, fit, zoomAt,
-  isHideKey, findingVoxelsOnSlice, montageSlices, zoomTo, resizeView, surfaceSliceRange, stepIndex,
+  isHideKey, findingVoxelsOnSlice, zoomTo, resizeView, stepIndex, visiblePlanes,
 } from "../../src/surfaceqa/web/static/logic.js";
 
 const coronal = {axis: 1, h_axis: 0, v_axis: 2, h_flip: true, v_flip: true, width: 32, height: 40, n_slices: 48};
@@ -66,15 +66,6 @@ test("findingVoxelsOnSlice picks the voxels on the slice, in screen coordinates"
   assert.deepEqual(findingVoxelsOnSlice(voxels, {voxel_start: 3, voxel_count: 1}, coronal, 24), []);
 });
 
-test("montageSlices are evenly spaced inside the volume", () => {
-  const s = montageSlices(320, 20);
-  assert.equal(s.length, 20);
-  assert.equal(s[0], 15);
-  assert.equal(s[19], 304);
-  assert.ok(s.every((v, i) => i === 0 || v > s[i - 1]));
-  assert.deepEqual(montageSlices(5, 20), [0, 1, 2, 3, 4]);
-});
-
 test("zoomTo centres the point and sets the field of view", () => {
   const v = zoomTo(600, 400, coronal, {h: 0.8, v: 0.8}, 10, 20, 50);
   assert.equal(v.scale, 8); // 400 px / 50 mm
@@ -89,19 +80,6 @@ test("resizeView keeps the same image point at the centre and the same zoom", ()
   assert.equal((150 - v.dy) / 8, (200 - 40) / 8);
 });
 
-test("surfaceSliceRange is the first and last slice with any contour", () => {
-  const index = {quant: 64, surfaces: {"lh.pial": [0, 0, 0, 5, 9, 9, 9], "rh.pial": [9, 9, 9, 9, 9, 12, 12]}};
-  assert.deepEqual(surfaceSliceRange(index), [2, 4]);
-  assert.deepEqual(surfaceSliceRange({quant: 64, surfaces: {"lh.pial": [0, 0, 0]}}), null);
-});
-
-test("montageSlices can be limited to a slice range", () => {
-  const s = montageSlices(320, 20, 100, 199);
-  assert.equal(s.length, 20);
-  assert.ok(s[0] > 100 && s[19] < 199);
-  assert.deepEqual(montageSlices(320, 20, 10, 14), [10, 11, 12, 13, 14]);
-});
-
 test("zoomTo refuses a canvas with no size (a hidden view)", () => {
   assert.equal(zoomTo(0, 0, coronal, {h: 1, v: 1}, 10, 20, 50), null);
 });
@@ -113,4 +91,10 @@ test("stepIndex moves through a list without wrapping, starting from either end"
   assert.equal(stepIndex(4, 1, 5), 4);
   assert.equal(stepIndex(0, -1, 5), 0);
   assert.equal(stepIndex(null, 1, 0), null);
+});
+
+test("visiblePlanes: all three, or the one chosen", () => {
+  assert.deepEqual(visiblePlanes("three"), ["coronal", "sagittal", "axial"]);
+  assert.deepEqual(visiblePlanes("sagittal"), ["sagittal"]);
+  assert.deepEqual(visiblePlanes("nonsense"), ["coronal", "sagittal", "axial"]);
 });

@@ -163,11 +163,16 @@ def test_checklist_sits_beside_the_viewer(qa_planted):
                      r'<aside id="checklist" class="sidebar">.*?</aside>\s*</div>', html, re.S)
     aside = html[html.index('<aside id="checklist"'):html.index("</aside>")]
     assert aside.count("data-region=") == 9 and "data-finding=" in aside
-    assert 'data-montage="contours"' in aside and 'data-montage="t1"' in aside
+    assert 'data-scroll="contours"' in aside and 'data-scroll="t1"' in aside
 
 
-def test_whole_brain_montage_replaces_the_views_instead_of_sitting_below(qa_planted):
+def test_whole_brain_pass_is_a_single_large_scrollable_view(qa_planted):
+    """The bird's-eye and T1 passes scroll one large view (coronal first), not a grid of thumbnails."""
     html = (qa_planted / "subjects" / "fastsurfer__sub-01" / "index.html").read_text()
     viewer = html[html.index('<section class="viewer"'):html.index("</section>", html.index('<section class="viewer"'))]
-    assert 'class="montage"' in viewer and 'id="back-to-views"' in viewer
+    layouts = re.findall(r'data-layout="(\w+)"', viewer)
+    assert layouts == ["three", "coronal", "sagittal", "axial"]
+    assert "montage" not in html
+    aside = html[html.index('<aside id="checklist"'):html.index("</aside>")]
+    assert ">Scroll through all slices<" in aside and ">Scroll through all slices, T1 only<" in aside
     assert "n / p: next / previous location" in viewer
