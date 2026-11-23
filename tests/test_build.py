@@ -156,7 +156,7 @@ def test_build_writes_findings(tmp_path):
     res = build_subject(ref, qa)
     assert load_findings(qa, ref.key)["score"] > 0
     meta = json.loads((qa / "subjects" / ref.key / "runs" / res.run / "meta.json").read_text())
-    assert meta["format"] == 2
+    assert meta["format"] == 3  # the run folder gained grid_to_tkr in meta.json
 
 
 def test_subject_without_qa_files_builds_with_indicators_not_run(built):
@@ -221,3 +221,17 @@ def test_findings_are_recomputed_when_the_indicator_code_version_changes(tmp_pat
     monkeypatch.setattr("surfaceqa.qa.QA_VERSION", 10_000)
     assert build_subject(ref, qa).status == "updated"
     assert load_findings(qa, ref.key)["qa_version"] == 10_000
+
+
+def test_meta_records_grid_to_tkr_that_inverts_the_display_transform(tmp_path):
+    from surfaceqa.geometry import load_display_volume, to_grid, to_tkr
+
+    subj = write_subject(tmp_path / "fastsurfer", voxel=(0.8, 1.0, 1.2), orientation="RAS",
+                         cras=(3.0, -2.0, 5.0), centre=(2.0, 1.0, -3.0))
+    ref = find_subjects([subj])[0]
+    build_subject(ref, tmp_path / "qa")
+    grid_to_tkr = np.array(load_meta(tmp_path / "qa", ref.key)["grid_to_tkr"])
+    assert grid_to_tkr.shape == (4, 4)
+    verts, _ = nib.freesurfer.read_geometry(subj / "surf" / "lh.pial")
+    grid = to_grid(verts, load_display_volume(subj / "mri" / "orig.mgz").tkr_to_grid)
+    assert np.allclose(to_tkr(grid, grid_to_tkr), verts, atol=1e-4)
