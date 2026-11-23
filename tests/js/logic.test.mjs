@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import {
   sliceSegments, gridToScreen, screenToGrid, clampSlice, crosshairs, initialCursor, fit, zoomAt,
-  isHideKey, findingVoxelsOnSlice, montageSlices, zoomTo,
+  isHideKey, findingVoxelsOnSlice, montageSlices, zoomTo, resizeView, surfaceSliceRange,
 } from "../../src/surfaceqa/web/static/logic.js";
 
 const coronal = {axis: 1, h_axis: 0, v_axis: 2, h_flip: true, v_flip: true, width: 32, height: 40, n_slices: 48};
@@ -80,4 +80,24 @@ test("zoomTo centres the point and sets the field of view", () => {
   assert.equal(v.scale, 8); // 400 px / 50 mm
   assert.equal(v.dx + (10 + 0.5) * 0.8 * v.scale, 300);
   assert.equal(v.dy + (20 + 0.5) * 0.8 * v.scale, 200);
+});
+
+test("resizeView keeps the same image point at the centre and the same zoom", () => {
+  const v = resizeView({scale: 8, dx: 100, dy: 40}, 600, 400, 800, 300);
+  assert.equal(v.scale, 8);
+  assert.equal((400 - v.dx) / 8, (300 - 100) / 8); // image point at the new centre = at the old centre
+  assert.equal((150 - v.dy) / 8, (200 - 40) / 8);
+});
+
+test("surfaceSliceRange is the first and last slice with any contour", () => {
+  const index = {quant: 64, surfaces: {"lh.pial": [0, 0, 0, 5, 9, 9, 9], "rh.pial": [9, 9, 9, 9, 9, 12, 12]}};
+  assert.deepEqual(surfaceSliceRange(index), [2, 4]);
+  assert.deepEqual(surfaceSliceRange({quant: 64, surfaces: {"lh.pial": [0, 0, 0]}}), null);
+});
+
+test("montageSlices can be limited to a slice range", () => {
+  const s = montageSlices(320, 20, 100, 199);
+  assert.equal(s.length, 20);
+  assert.ok(s[0] > 100 && s[19] < 199);
+  assert.deepEqual(montageSlices(320, 20, 10, 14), [10, 11, 12, 13, 14]);
 });
