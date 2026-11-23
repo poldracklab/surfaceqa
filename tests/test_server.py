@@ -506,3 +506,13 @@ def test_scripts_come_from_the_installed_tool_not_from_the_copy_in_the_qa_direct
     (qa_planted / "static" / "review.js").write_text("// from an older version")
     served = _client(qa_planted).get("/static/review.js").text
     assert served == (resources.files("surfaceqa") / "web" / "static" / "review.js").read_text()
+
+
+def test_scripts_are_checked_with_the_server_before_a_cached_copy_is_used(qa_planted):
+    """After an upgrade a browser must not go on running the scripts it cached."""
+    client = _client(qa_planted)
+    for name in ("review.js", "logic.js", "viewer.js", "app.css"):
+        response = client.get(f"/static/{name}")
+        assert response.headers["cache-control"] == "no-cache" and response.headers["etag"]
+    again = client.get("/static/logic.js", headers={"if-none-match": response.headers["etag"]})
+    assert again.status_code in (200, 304)
