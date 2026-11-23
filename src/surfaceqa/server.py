@@ -180,5 +180,6 @@ def create_app(qa_dir: Path, blind: bool = False) -> FastAPI:
     app.state.qa_dir = Path(qa_dir)
     app.state.blind = blind
     app.include_router(router)
-    app.mount("/static", StaticFiles(directory=Path(qa_dir) / "static", check_dir=False), name="static")
+    # the scripts of this version of the tool, not the copy an earlier build left in the QA directory
+    app.mount("/static", StaticFiles(packages=[("surfaceqa", "web/static")]), name="static")
     return app
