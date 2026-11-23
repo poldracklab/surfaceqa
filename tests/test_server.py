@@ -470,3 +470,14 @@ def test_overlapping_saves_and_a_submit_leave_a_submitted_review(qa_planted):
         assert len(results) == 13
         assert load_review(qa_planted, FIRST, run, "cat")["submitted"]
         assert [p.name for p in path.parent.iterdir()] == ["cat.json"]
+
+
+def test_a_refused_submit_reports_the_stamp_of_the_draft_it_saved(qa_planted):
+    """Otherwise the page's next save would look like one from a stale window."""
+    client = TestClient(create_app(qa_planted))
+    client.cookies.set("surfaceqa_reviewer", "cat")
+    payload = {**_payload(qa_planted, FIRST), "grade": None, "reviewer": "cat", "saved": None}
+    refused = client.post(f"/api/review/{FIRST}/submit", json=payload)
+    assert refused.status_code == 422 and refused.json()["saved"]
+    again = client.put(f"/api/review/{FIRST}", json={**payload, "saved": refused.json()["saved"]})
+    assert again.status_code == 200
