@@ -28,7 +28,7 @@ surface indicators). "not run" means the inputs do not exist for that pipeline.
 | `hemisphere_crossing` | 0 | 0 | 0 |
 | `thick_patches` | 6 (433 vertices) | 5 (614 vertices) | 4 (360 vertices) |
 | `topology_defects` | 2 (794 vertices) | 7 (3,196 vertices) | 13 (3,932 vertices) |
-| **Suspicion score** | **4.0** | **13.3** | **55.9** |
+| **Suspicion score** | **4.0** | **13.2** | **55.9** |
 
 These are the numbers after the noise margin was corrected and after the comparison with
 SynthSeg was set up properly (see "Changes made because of this"). Before the correction FastSurfer had 15 findings, recon-all 24 and NSD 74; the
