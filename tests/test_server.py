@@ -497,3 +497,12 @@ def test_a_refused_submit_reports_the_stamp_of_the_draft_it_saved(qa_planted):
     assert refused.status_code == 422 and refused.json()["saved"]
     again = client.put(f"/api/review/{FIRST}", json={**payload, "saved": refused.json()["saved"]})
     assert again.status_code == 200
+
+
+def test_scripts_come_from_the_installed_tool_not_from_the_copy_in_the_qa_directory(qa_planted):
+    """A QA directory built by an older version must not pair old scripts with a new server."""
+    from importlib import resources
+
+    (qa_planted / "static" / "review.js").write_text("// from an older version")
+    served = _client(qa_planted).get("/static/review.js").text
+    assert served == (resources.files("surfaceqa") / "web" / "static" / "review.js").read_text()
