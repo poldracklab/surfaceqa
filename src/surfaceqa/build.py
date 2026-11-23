@@ -15,11 +15,14 @@ from surfaceqa.contours import SURFACE_ORDER, pack_plane, plane_segments
 from surfaceqa.discover import SubjectRef
 from surfaceqa.fingerprint import surface_fingerprint
 from surfaceqa.geometry import DisplayVolume, load_display_volume, to_grid
+from surfaceqa.layout import current_run_dir, read_json, subject_dir
 from surfaceqa.pipelines import PipelineInfo, SubjectFiles, detect_pipeline, subject_files
 from surfaceqa.planes import PLANES, Plane
+from surfaceqa.qa import write_findings
 from surfaceqa.slices import intensity_window, write_plane_slices
+from surfaceqa.subjectdata import load_subject_data
 
-BUILD_FORMAT = 1  # raise when the contents of a run folder change, so old runs are re-rendered
+BUILD_FORMAT = 2  # raise when the contents of a run folder change, so old runs are re-rendered
 COLORS = {"lh.pial": "#ffe100", "rh.pial": "#ffe100", "lh.white": "#2b6cff", "rh.white": "#ff3b30"}
 
 
@@ -29,10 +32,6 @@ class BuildResult:
     status: str  # built, unchanged, missing, failed
     run: str | None = None
     missing: list[str] = field(default_factory=list)
-
-
-def subject_dir(qa_dir: Path, key: str) -> Path:
-    return Path(qa_dir) / "subjects" / key
 
 
 def _write_json(path: Path, payload: dict) -> None:
@@ -96,6 +95,16 @@ def _run_meta(ref, pipeline, run: str, volume: DisplayVolume, window) -> dict:
     }
 
 
+def _run_qa(ref: SubjectRef, pipeline: PipelineInfo, run_dir: Path) -> None:
+    """Compute the indicators; a failure here is recorded and must not lose the viewer."""
+    error_file = run_dir.parent.parent / "qa_error.txt"
+    try:
+        write_findings(load_subject_data(ref.path, pipeline), run_dir)
+        error_file.unlink(missing_ok=True)
+    except Exception:
+        error_file.write_text(traceback.format_exc())
+
+
 def _render_run(ref, pipeline, files: SubjectFiles, run: str, run_dir: Path) -> None:
     shutil.rmtree(run_dir, ignore_errors=True)  # an interrupted build starts over
     run_dir.mkdir(parents=True)
@@ -103,6 +112,7 @@ def _render_run(ref, pipeline, files: SubjectFiles, run: str, run_dir: Path) -> 
     window = intensity_window(volume.data)
     _write_slices(volume, window, run_dir)
     _write_contours(_load_surfaces_grid(files, volume), volume, run_dir)
+    _run_qa(ref, pipeline, run_dir)
     _write_json(run_dir / "meta.json", _run_meta(ref, pipeline, run, volume, window))  # last
 
 
@@ -151,9 +161,5 @@ def build_all(refs: list[SubjectRef], qa_dir: Path, jobs: int = 1) -> list[Build
 
 
 def load_meta(qa_dir: Path, key: str) -> dict | None:
-    folder = subject_dir(qa_dir, key)
-    try:
-        run = json.loads((folder / "current.json").read_text())["run"]
-        return json.loads((folder / "runs" / run / "meta.json").read_text())
-    except (OSError, KeyError, ValueError):
-        return None
+    run_dir = current_run_dir(qa_dir, key)
+    return None if run_dir is None else read_json(run_dir / "meta.json")
