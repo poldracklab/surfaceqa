@@ -1,0 +1,13 @@
+{% extends "base.html" %}
+{% block main %}
+<h1>Subjects</h1>
+<p class="note">No subject has been reviewed yet. "ready" means the report was rendered, not that the surfaces are good.</p>
+<table class="subjects">
+<thead><tr><th>Subject</th><th>Source</th><th>Pipeline</th><th>Status</th></tr></thead>
+<tbody>
+{% for s in subjects %}
+<tr><td><a href="{{ s.href }}">{{ s.name }}</a></td><td>{{ s.source }}</td><td>{{ s.pipeline_label }}</td><td class="status">{{ s.status }}</td></tr>
+{% endfor %}
+</tbody>
+</table>
+{% endblock %}
