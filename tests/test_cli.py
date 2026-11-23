@@ -74,3 +74,39 @@ def test_serve_accepts_blind(qa, monkeypatch):
     assert seen["blind"] is True
     assert main(["serve", str(qa)]) == 0
     assert seen["blind"] is False
+
+
+def test_export_command_writes_four_tables(qa, capsys):
+    from surfaceqa.cli import main
+
+    assert main(["export", str(qa)]) == 0
+    assert sorted(p.name for p in (qa / "export").iterdir()) == [
+        "final.tsv", "indicators.tsv", "marks.tsv", "ratings.tsv"]
+    assert "ratings.tsv" in capsys.readouterr().out
+
+
+def test_finalize_command_lists_disagreements(qa, capsys):
+    from surfaceqa.cli import main
+    from surfaceqa.layout import current_run_dir
+    from surfaceqa.review_store import submit_review
+    from tests.reviewing import MARK, make_review
+
+    key = "fastsurfer__sub-01"
+    run = current_run_dir(qa, key).name
+    submit_review(qa, make_review("ann", key, run, sinus="major", grade="A", marks=[MARK]))
+    submit_review(qa, make_review("bob", key, run, sinus="none", grade="C"))
+    assert main(["finalize", str(qa)]) == 0
+    out = capsys.readouterr().out
+    assert f"{key}: Sagittal and transverse sinus (ann Major (needs fix), bob None); grade (ann A, bob C)" in out
+    assert "1 disagreement" in out and "1 unreviewed" in out
+    assert (qa / "final" / f"{key}.json").is_file()
+    assert "disagreement" in (qa / "index.html").read_text()
+
+
+def test_finalize_and_export_refuse_a_folder_that_is_not_a_qa_directory(tmp_path, capsys):
+    from surfaceqa.cli import main
+
+    assert main(["finalize", str(tmp_path)]) == 2
+    assert main(["export", str(tmp_path)]) == 2
+    assert "surfaceqa build" in capsys.readouterr().err
+    assert list(tmp_path.iterdir()) == []
