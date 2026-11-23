@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import {
   sliceSegments, gridToScreen, screenToGrid, clampSlice, crosshairs, initialCursor, fit, zoomAt,
-  isHideKey, findingVoxelsOnSlice, montageSlices, zoomTo, resizeView, surfaceSliceRange,
+  isHideKey, findingVoxelsOnSlice, montageSlices, zoomTo, resizeView, surfaceSliceRange, stepIndex,
 } from "../../src/surfaceqa/web/static/logic.js";
 
 const coronal = {axis: 1, h_axis: 0, v_axis: 2, h_flip: true, v_flip: true, width: 32, height: 40, n_slices: 48};
@@ -104,4 +104,13 @@ test("montageSlices can be limited to a slice range", () => {
 
 test("zoomTo refuses a canvas with no size (a hidden view)", () => {
   assert.equal(zoomTo(0, 0, coronal, {h: 1, v: 1}, 10, 20, 50), null);
+});
+
+test("stepIndex moves through a list without wrapping, starting from either end", () => {
+  assert.equal(stepIndex(null, 1, 5), 0);
+  assert.equal(stepIndex(null, -1, 5), 4);
+  assert.equal(stepIndex(2, 1, 5), 3);
+  assert.equal(stepIndex(4, 1, 5), 4);
+  assert.equal(stepIndex(0, -1, 5), 0);
+  assert.equal(stepIndex(null, 1, 0), null);
 });

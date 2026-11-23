@@ -155,3 +155,19 @@ def test_subjects_are_ranked_within_their_source_folder(tmp_path):
     html = (qa / "index.html").read_text()
     assert html.count("1 of 1") == 2 and "of 2" not in html
     assert "rank 1 of 1 in siteA-fs6" in (qa / "subjects" / "siteA-fs6__sub-01" / "index.html").read_text()
+
+
+def test_checklist_sits_beside_the_viewer(qa_planted):
+    html = (qa_planted / "subjects" / "fastsurfer__sub-01" / "index.html").read_text()
+    assert re.search(r'<div class="workspace">\s*<section class="viewer" id="viewer".*?</section>\s*'
+                     r'<aside id="checklist" class="sidebar">.*?</aside>\s*</div>', html, re.S)
+    aside = html[html.index('<aside id="checklist"'):html.index("</aside>")]
+    assert aside.count("data-region=") == 9 and "data-finding=" in aside
+    assert 'data-montage="contours"' in aside and 'data-montage="t1"' in aside
+
+
+def test_whole_brain_montage_replaces_the_views_instead_of_sitting_below(qa_planted):
+    html = (qa_planted / "subjects" / "fastsurfer__sub-01" / "index.html").read_text()
+    viewer = html[html.index('<section class="viewer"'):html.index("</section>", html.index('<section class="viewer"'))]
+    assert 'class="montage"' in viewer and 'id="back-to-views"' in viewer
+    assert "n / p: next / previous location" in viewer
