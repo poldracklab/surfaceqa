@@ -9,6 +9,12 @@ def test_points():
     assert finding_points(Finding("x", "thickness", (0, 0, 0), None, 300)) == 1.5
 
 
+def test_topology_defects_weigh_little():
+    # On subject 07 the largest defects sit on the medial wall and were repaired automatically,
+    # yet they were the top-ranked findings in two of three reconstructions.
+    assert finding_points(Finding("x", "topology", (0, 0, 0), None, 500)) == 1.0
+
+
 def test_score_is_the_rounded_sum():
     fs = [Finding("x", "pial_out", (0, 0, 0), 123.0, 1), Finding("x", "pial_out", (0, 0, 0), 20.0, 1)]
     assert suspicion_score(fs) == 1.4 and suspicion_score([]) == 0.0

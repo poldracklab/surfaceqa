@@ -78,10 +78,31 @@ export function findingVoxelsOnSlice(voxels, finding, plane, slice) {
   return out;
 }
 
-// `count` slice indices evenly spaced strictly inside 0..n-1 (all of them if n is small).
-export function montageSlices(n, count) {
-  if (n <= count) return Array.from({length: n}, (_, i) => i);
-  return Array.from({length: count}, (_, i) => Math.round(((i + 1) * (n - 1)) / (count + 1)));
+// `count` slice indices evenly spaced strictly inside first..last (all of them if there are few).
+export function montageSlices(n, count, first = 0, last = n - 1) {
+  const span = last - first + 1;
+  if (span <= count) return Array.from({length: span}, (_, i) => first + i);
+  return Array.from({length: count}, (_, i) => first + Math.round(((i + 1) * (span - 1)) / (count + 1)));
+}
+
+// First and last slice on which any surface has a contour, or null if there are none.
+export function surfaceSliceRange(index) {
+  let first = Infinity;
+  let last = -Infinity;
+  for (const offsets of Object.values(index.surfaces)) {
+    for (let i = 0; i + 1 < offsets.length; i++) {
+      if (offsets[i + 1] > offsets[i]) {
+        first = Math.min(first, i);
+        last = Math.max(last, i);
+      }
+    }
+  }
+  return last < first ? null : [first, last];
+}
+
+// After the canvas changes size: same zoom, same image point at the centre.
+export function resizeView(view, oldW, oldH, newW, newH) {
+  return {scale: view.scale, dx: view.dx + (newW - oldW) / 2, dy: view.dy + (newH - oldH) / 2};
 }
 
 // A view centred on screen point (x, y) showing fieldMm across the smaller canvas dimension.

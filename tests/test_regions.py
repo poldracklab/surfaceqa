@@ -14,6 +14,7 @@ LEFT_BOXES = [
     (1012, (10, 29), (60, 70), (15, 22)),  # lateral orbitofrontal
     (1009, (10, 29), (35, 45), (15, 22)),  # inferior temporal
     (1016, (24, 29), (35, 45), (24, 28)),  # parahippocampal
+    (1014, (24, 29), (60, 70), (23, 27)),  # medial orbitofrontal
     (1029, (10, 29), (25, 34), (46, 50)),  # superior parietal
     (8, (12, 28), (8, 22), (8, 20)),       # cerebellum
     (17, (25, 28), (36, 44), (29, 31)),    # hippocampus
@@ -52,6 +53,7 @@ def f(kind, grid):
     ("pial_out", (20, 15, 23), "cerebellum"),  # just above the cerebellum
     ("pial_out", (28, 65, 40), "frontal_midline"),
     ("pial_out", (15, 65, 18), "orbitofrontal"),
+    ("pial_out", (28, 65, 25), "orbitofrontal"),  # medial orbitofrontal is orbital, not "frontal midline"
     ("gray_missed", (15, 40, 18), "inferior_temporal"),
     ("pial_out", (26, 40, 26), "medial_temporal"),
     ("thickness", (15, 30, 49), "outer_edge"),

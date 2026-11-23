@@ -58,7 +58,9 @@ function makeTile(data, viewer, slice, withContours) {
 }
 
 function fillMontages(data, viewer) {
-  const slices = L.montageSlices(data.meta.planes.coronal.n_slices, TILES);
+  const n = data.meta.planes.coronal.n_slices;
+  const range = L.surfaceSliceRange(data.contours.coronal.index) || [0, n - 1];
+  const slices = L.montageSlices(n, TILES, range[0], range[1]);
   for (const box of document.querySelectorAll("#checklist .montage")) {
     const withContours = box.dataset.contours === "1";
     for (const slice of slices) box.append(makeTile(data, viewer, slice, withContours));

@@ -46,6 +46,17 @@ function refit(v) {
   const size = pixelSize(v.plane);
   v.view = L.fit(v.canvas.clientWidth, v.canvas.clientHeight,
     v.plane.width * size.h, v.plane.height * size.v);
+  v.size = [v.canvas.clientWidth, v.canvas.clientHeight];
+}
+
+// The canvas changed size (window resize, enlarge): keep the zoom and what is at the centre.
+function onResize(v) {
+  const [w, h] = [v.canvas.clientWidth, v.canvas.clientHeight];
+  if (w === 0 || h === 0) return;
+  if (v.size[0] === 0 || v.size[1] === 0) refit(v);
+  else v.view = L.resizeView(v.view, v.size[0], v.size[1], w, h);
+  v.size = [w, h];
+  draw(v);
 }
 
 function image(v, i) {
@@ -281,7 +292,7 @@ function bindView(v) {
   v.canvas.addEventListener("dblclick", () => toggleEnlarge(v));
   v.slider.max = v.plane.n_slices - 1;
   v.slider.addEventListener("input", () => step(v, Number(v.slider.value) - state.cursor[v.plane.axis]));
-  new ResizeObserver(() => { refit(v); draw(v); }).observe(v.canvas);
+  new ResizeObserver(() => onResize(v)).observe(v.canvas);
 }
 
 function bindToolbar() {
