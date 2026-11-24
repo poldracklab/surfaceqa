@@ -19,6 +19,7 @@ from surfaceqa.geometry import DisplayVolume, load_display_volume, to_grid
 from surfaceqa.layout import current_run_dir, read_json, subject_dir
 from surfaceqa.pipelines import PipelineInfo, SubjectFiles, detect_pipeline, subject_files
 from surfaceqa.planes import PLANES, Plane
+from surfaceqa.provenance import write_provenance
 from surfaceqa import qa
 from surfaceqa.qa import write_findings
 from surfaceqa.slices import intensity_window, write_plane_slices
@@ -31,7 +32,7 @@ COLORS = {"lh.pial": "#ffe100", "rh.pial": "#ffe100", "lh.white": "#2b6cff", "rh
 @dataclass
 class BuildResult:
     key: str
-    status: str  # built, updated (indicators recomputed), unchanged, missing, failed
+    status: str  # built, updated (indicators or provenance redone), unchanged, missing, failed
     run: str | None = None
     missing: list[str] = field(default_factory=list)
 
@@ -117,6 +118,14 @@ def _update_qa(ref: SubjectRef, pipeline: PipelineInfo, run_dir: Path) -> bool:
     return True
 
 
+def _update_provenance(ref: SubjectRef, pipeline: PipelineInfo, run_dir: Path) -> bool:
+    """Record the original command and edit state; a failure must not lose the viewer."""
+    try:
+        return write_provenance(ref, pipeline, run_dir)
+    except Exception:
+        return False
+
+
 def _render_run(ref, pipeline, files: SubjectFiles, run: str, run_dir: Path) -> None:
     shutil.rmtree(run_dir, ignore_errors=True)  # an interrupted build starts over
     run_dir.mkdir(parents=True)
@@ -147,6 +156,7 @@ def build_subject(ref: SubjectRef, qa_dir: Path) -> BuildResult:
     if not rendered:
         _render_run(ref, pipeline, files, run, run_dir)
     recomputed = _update_qa(ref, pipeline, run_dir)
+    recomputed = _update_provenance(ref, pipeline, run_dir) or recomputed
     status = "built" if not rendered else ("updated" if recomputed else "unchanged")
     _clear_stale(folder)
     _write_json(folder / "current.json", {"run": run})

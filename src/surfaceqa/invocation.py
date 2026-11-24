@@ -19,29 +19,40 @@ def _lines(path: Path) -> list[str]:
         return []
 
 
-def _fastsurfer_command(scripts: Path) -> str | None:
+def _fastsurfer_commands(scripts: Path) -> list[str]:
     prefix = "Invocation:"
     found = (line[len(prefix):].strip() for line in _lines(scripts / "deep-seg.log")
              if line.startswith(prefix))
-    return next(found, None) or None
+    return [command for command in found if command]
 
 
-def _is_recon_all_call(line: str) -> bool:
+def _recon_all_call(line: str, following: str) -> str | None:
+    """The command when `line` starts one; recon-all 6 put the arguments on the next line."""
     words = line.split()
-    return len(words) > 1 and Path(words[0]).name == "recon-all" and words[1].startswith("-")
+    if not words or Path(words[0]).name != "recon-all":
+        return None
+    if len(words) == 1:
+        return f"{line.strip()} {following.strip()}" if following.lstrip().startswith("-") else None
+    return line.strip() if words[1].startswith("-") else None
 
 
-def _recon_all_command(scripts: Path) -> str | None:
-    found = (line.strip() for line in _lines(scripts / "recon-all.log") if _is_recon_all_call(line))
-    return next(found, None)
+def _recon_all_commands(scripts: Path) -> list[str]:
+    lines = _lines(scripts / "recon-all.log")
+    calls = (_recon_all_call(line, following) for line, following in zip(lines, lines[1:] + [""]))
+    return [call for call in calls if call]
+
+
+def all_commands(subject_dir: Path, pipeline: str) -> list[str]:
+    """Every command line the subject's log recorded, oldest first."""
+    scripts = Path(subject_dir) / "scripts"
+    if pipeline == "fastsurfer":
+        return _fastsurfer_commands(scripts)
+    return _recon_all_commands(scripts) if pipeline == "freesurfer" else []
 
 
 def original_command(subject_dir: Path, pipeline: str) -> str | None:
     """The command of the subject's first run as its log recorded it, or None."""
-    scripts = Path(subject_dir) / "scripts"
-    if pipeline == "fastsurfer":
-        return _fastsurfer_command(scripts)
-    return _recon_all_command(scripts) if pipeline == "freesurfer" else None
+    return next(iter(all_commands(subject_dir, pipeline)), None)
 
 
 def _words(command: str | None) -> list[str] | None:
