@@ -170,3 +170,118 @@ def test_a_later_build_with_a_template_keeps_the_recorded_sources(synth_sources,
     main(["build", str(synth_sources[1]), "--out", str(qa), "--rerun-template", "ssh box {command}"])
     assert sources(qa) == [s.resolve() for s in synth_sources]
     assert rerun_template(qa, "freesurfer-8.2.0") == "ssh box {command}"
+
+
+# ---- surfaceqa with no sub-command: the start page --------------------------------------------
+
+import re
+import socket
+
+import pytest
+
+
+@pytest.fixture
+def launched(monkeypatch):
+    """Run the start command without a real server or browser; records what it would do."""
+    import uvicorn
+
+    from surfaceqa import cli
+
+    seen = {"opened": []}
+    monkeypatch.setattr(uvicorn, "run", lambda app, **kwargs: seen.update(app=app, **kwargs))
+    monkeypatch.setattr(cli, "_open_when_listening", lambda port, address: seen["opened"].append((port, address)))
+    return seen
+
+
+def _free() -> int:
+    with socket.socket() as probe:
+        probe.bind(("127.0.0.1", 0))
+        return probe.getsockname()[1]
+
+
+@pytest.mark.parametrize("argv", [[], ["start"]])
+def test_no_sub_command_starts_the_start_page(launched, capsys, argv):
+    port = _free()
+    assert main([*argv, *(["--port", str(port)] if argv else [])]) == 0
+    assert launched["host"] == "127.0.0.1"
+    app = launched["app"]
+    assert app.state.qa_dir is None and len(app.state.start.token) >= 16
+    printed = capsys.readouterr().out
+    address = re.search(r"http://127\.0\.0\.1:(\d+)/\?token=(\S+)", printed)
+    assert address and int(address.group(1)) == launched["port"] and address.group(2) == app.state.start.token
+    assert launched["opened"] == [(launched["port"], address.group(0))]
+    if argv:
+        assert launched["port"] == port
+
+
+def test_each_launch_has_its_own_token(launched):
+    main(["start", "--port", str(_free())])
+    first = launched["app"].state.start.token
+    main(["start", "--port", str(_free())])
+    assert launched["app"].state.start.token != first
+
+
+@pytest.mark.parametrize("argv", [["--no-browser"], ["start", "--no-browser"]])
+def test_no_browser(launched, argv):
+    assert main(argv) == 0
+    assert launched["opened"] == [] and launched["host"] == "127.0.0.1"
+
+
+def test_a_taken_port_moves_to_the_next_free_one(launched, capsys):
+    with socket.socket() as taken:
+        taken.bind(("127.0.0.1", 0))
+        taken.listen()
+        port = taken.getsockname()[1]
+        assert main(["start", "--port", str(port), "--no-browser"]) == 0
+    assert port < launched["port"] <= port + 20
+    assert f"http://127.0.0.1:{launched['port']}/" in capsys.readouterr().out
+
+
+def test_start_cannot_be_given_a_host(launched):
+    with pytest.raises(SystemExit) as stop:
+        main(["start", "--host", "0.0.0.0"])
+    assert stop.value.code == 2 and "app" not in launched
+
+
+def test_help_lists_start(capsys):
+    with pytest.raises(SystemExit) as stop:
+        main(["--help"])
+    assert stop.value.code == 0 and "start" in capsys.readouterr().out
+
+
+def test_a_build_still_running_is_stopped_when_the_tool_is_closed(monkeypatch):
+    import uvicorn
+
+    from surfaceqa import cli, jobs
+
+    job, cancelled = object(), []
+    monkeypatch.setattr(uvicorn, "run", lambda app, **kwargs: setattr(app.state.start, "job", job))
+    monkeypatch.setattr(jobs, "cancel", cancelled.append)
+    monkeypatch.setattr(cli, "_open_when_listening", lambda port, address: None)
+    assert main(["start", "--port", str(_free())]) == 0
+    assert cancelled == [job]
+
+
+def test_the_browser_is_opened_once_the_port_answers(monkeypatch):
+    import webbrowser
+
+    from surfaceqa import cli
+
+    opened = []
+    monkeypatch.setattr(webbrowser, "open", opened.append)
+    with socket.socket() as server:
+        server.bind(("127.0.0.1", 0))
+        server.listen()
+        cli._open_when_listening(server.getsockname()[1], "http://x/").join(timeout=10)
+    assert opened == ["http://x/"]
+
+
+def test_the_browser_is_not_opened_when_nothing_ever_listens(monkeypatch):
+    import webbrowser
+
+    from surfaceqa import cli
+
+    opened = []
+    monkeypatch.setattr(webbrowser, "open", opened.append)
+    cli._open_when_listening(_free(), "http://x/", wait=0.3).join(timeout=10)
+    assert opened == []
