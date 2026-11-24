@@ -8,6 +8,7 @@ WHAT = {
     "thickness": "thick patch", "topology": "topology defect",
     "look_here": "cortex label outside the pial surface",
 }
+WHAT_BY_INDICATOR = {"cohort_thickness": "thicker than the cohort"}
 HINT_KIND = "look_here"
 
 
@@ -18,9 +19,10 @@ def scored_findings(found: dict) -> list[dict]:
 
 def finding_text(finding: dict) -> str:
     """For example 'pial too far out · 217 mm³' or 'thick patch · 391 vertices'."""
+    what = WHAT_BY_INDICATOR.get(finding.get("indicator"), WHAT[finding["kind"]])
     if finding["size_mm3"] is None:
-        return f"{WHAT[finding['kind']]} · {finding['n']} vertices"
-    return f"{WHAT[finding['kind']]} · {round(finding['size_mm3'])} mm³"
+        return f"{what} · {finding['n']} vertices"
+    return f"{what} · {round(finding['size_mm3'])} mm³"
 
 
 def _section(region, findings: list[dict], defaults: dict) -> dict:

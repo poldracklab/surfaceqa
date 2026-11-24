@@ -107,7 +107,7 @@ def test_indicator_table_has_a_row_per_indicator_and_the_score(qa_reviewed):
     assert list(rows[0]) == ["key", "source", "subject", "pipeline", "version", "edited", "run", "score",
                              "indicator", "status", "n_findings", "reason"]
     first = [r for r in rows if r["key"] == FIRST]
-    assert len(first) == 9 and float(first[0]["score"]) > 0
+    assert len(first) == 10 and float(first[0]["score"]) > 0
     outside = next(r for r in first if r["indicator"] == "ribbon_outside_brain")
     assert outside["status"] == "ran" and int(outside["n_findings"]) >= 1
 

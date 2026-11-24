@@ -6,6 +6,7 @@ from pathlib import Path
 import nibabel as nib
 import numpy as np
 
+from surfaceqa.cohort import Cohort
 from surfaceqa.geometry import load_display_volume, to_grid
 from surfaceqa.pipelines import PipelineInfo, subject_files
 
@@ -26,6 +27,7 @@ class HemiSurface:
     cortex: np.ndarray | None
     defect_labels: np.ndarray | None
     nofix_grid: np.ndarray | None
+    sphere: np.ndarray | None = None  # sphere.reg: the vertices in coordinates shared by all subjects
 
 
 @dataclass
@@ -41,6 +43,7 @@ class SubjectData:
     norm: np.ndarray | None
     hemis: dict[str, HemiSurface]
     seg_method: str = "network"  # "network" (FastSurfer, SynthSeg) or "atlas" (older recon-all)
+    cohort: Cohort | None = None  # thickness across the subjects of the same source folder
 
 
 def _optional(reader, *args):
@@ -83,6 +86,10 @@ def _grid_surface(path: Path, tkr_to_grid) -> tuple[np.ndarray, np.ndarray]:
     return to_grid(vertices, tkr_to_grid), faces
 
 
+def _sphere(path: Path) -> np.ndarray:
+    return nib.freesurfer.read_geometry(path)[0]
+
+
 def _hemi_surface(subject_dir: Path, hemi: str, pial_path: Path, tkr_to_grid) -> HemiSurface:
     surf = subject_dir / "surf"
     pial_grid, faces = _grid_surface(pial_path, tkr_to_grid)
@@ -93,6 +100,7 @@ def _hemi_surface(subject_dir: Path, hemi: str, pial_path: Path, tkr_to_grid) ->
         cortex=_optional(nib.freesurfer.read_label, subject_dir / "label" / f"{hemi}.cortex.label"),
         defect_labels=_optional(nib.freesurfer.read_morph_data, surf / f"{hemi}.defect_labels"),
         nofix_grid=None if nofix is None else nofix[0],
+        sphere=_optional(_sphere, surf / f"{hemi}.sphere.reg"),
     )
 
 
@@ -109,7 +117,8 @@ def _input_files(pipeline: PipelineInfo) -> list[str]:
     mri = ["ribbon.mgz", "lh.ribbon.mgz", "rh.ribbon.mgz", "norm.mgz", PARC_FILE, SYNTHSEG_FILE,
            SEG_FILE.get(pipeline.name, DEFAULT_SEG_FILE),
            *NONBRAIN_FILES.get(pipeline.name, DEFAULT_NONBRAIN_FILES)]
-    surf = [f"{hemi}.{name}" for hemi in HEMIS for name in ("thickness", "defect_labels", "orig.nofix")]
+    surf = [f"{hemi}.{name}" for hemi in HEMIS 
+            for name in ("thickness", "defect_labels", "orig.nofix", "sphere.reg")]
     return [f"mri/{f}" for f in mri] + [f"surf/{f}" for f in surf] + [
         f"label/{hemi}.cortex.label" for hemi in HEMIS]
 
@@ -125,7 +134,8 @@ def input_signature(subject_dir: Path, pipeline: PipelineInfo) -> dict[str, list
     return signature
 
 
-def load_subject_data(subject_dir: Path, pipeline: PipelineInfo) -> SubjectData:
+def load_subject_data(subject_dir: Path, pipeline: PipelineInfo,
+                      cohort: Cohort | None = None) -> SubjectData:
     subject_dir = Path(subject_dir)
     mri = subject_dir / "mri"
     files = subject_files(subject_dir)
@@ -140,4 +150,5 @@ def load_subject_data(subject_dir: Path, pipeline: PipelineInfo) -> SubjectData:
         voxel_sizes=grid.voxel_sizes, ribbon=_labels(mri / "ribbon.mgz", shape),
         hemi_ribbon=_hemi_ribbon(mri, shape), seg=seg, seg_name=seg_name if seg is not None else None,
         nonbrain=nonbrain, nonbrain_names=names, parc=_labels(mri / PARC_FILE, shape),
-        norm=_volume(mri / "norm.mgz", shape), hemis=hemis, seg_method=_seg_method(mri, pipeline))
+        norm=_volume(mri / "norm.mgz", shape), hemis=hemis, seg_method=_seg_method(mri, pipeline),
+        cohort=cohort)

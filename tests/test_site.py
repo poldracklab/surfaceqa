@@ -137,7 +137,7 @@ def test_subject_whose_indicators_failed_says_so(qa_planted):
 
 def test_index_says_how_many_indicators_did_not_run(qa_planted):
     html = (qa_planted / "index.html").read_text()
-    assert html.count("2 of 9 not run") == 3
+    assert html.count("3 of 10 not run") == 3
 
 
 def test_subject_with_no_indicator_run_is_not_ranked_as_zero(qa):

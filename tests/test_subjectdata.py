@@ -47,7 +47,7 @@ def test_volume_with_another_shape_is_ignored(synth_subject):
 
 
 def test_thresholds_as_dict_lists_every_constant():
-    assert thresholds.as_dict()["MARGIN_MM"] == 1.0 and len(thresholds.as_dict()) == 9
+    assert thresholds.as_dict()["MARGIN_MM"] == 1.0 and len(thresholds.as_dict()) == 13
 
 
 @pytest.mark.parametrize("keep", [0, 0.5])

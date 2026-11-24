@@ -7,6 +7,7 @@ import numpy as np
 
 from surfaceqa import thresholds
 from surfaceqa.findings import Finding
+from surfaceqa.indicators_cohort import COHORT_INDICATORS
 from surfaceqa.indicators_surface import SURFACE_INDICATORS
 from surfaceqa.indicators_volume import VOLUME_INDICATORS, IndicatorResult
 from surfaceqa.layout import current_run_dir, read_json
@@ -15,16 +16,17 @@ from surfaceqa import scoring
 from surfaceqa.scoring import finding_points, suspicion_score
 from surfaceqa.subjectdata import SubjectData
 
-QA_VERSION = 7  # raise whenever indicators, regions or scoring change, so findings are recomputed
+QA_VERSION = 8  # raise whenever indicators, regions or scoring change, so findings are recomputed
 FINDINGS_FILE = "findings.json"
 ERROR_FILE = "qa_error.txt"
 NON_BRAIN_REGIONS = {"sinus", "cerebellum", "outer_edge", "frontal_midline"}
 VOXELS_FILE = "findings_voxels.bin"
+INDICATORS = (*VOLUME_INDICATORS, *SURFACE_INDICATORS, *COHORT_INDICATORS)
 
 
 def run_indicators(data: SubjectData) -> tuple[list[IndicatorResult], str]:
     """Every indicator's result with findings assigned to regions, and a note on region assignment."""
-    results = [indicator(data) for indicator in (*VOLUME_INDICATORS, *SURFACE_INDICATORS)]
+    results = [indicator(data) for indicator in INDICATORS]
     context = build_context(data)
     for result in results:
         for finding in result.findings:
