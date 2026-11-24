@@ -170,3 +170,11 @@ def test_a_run_without_a_readable_meta_is_not_a_member(tmp_path):
     (tmp_path / "subjects" / "fs__sub-05" / "runs" / RUN / "meta.json").write_text("junk")
     update_cohorts(tmp_path)
     assert load_cohort(tmp_path, "fs").n == 5
+
+
+def test_unreadable_statistics_are_computed_again(tmp_path):
+    _cohort(tmp_path, [2.0] * 5)
+    update_cohorts(tmp_path)
+    (tmp_path / "cohort" / "fs.npz").write_bytes(b"junk")
+    assert update_cohorts(tmp_path) == {"fs"}
+    assert np.allclose(load_cohort(tmp_path, "fs").median["lh"], 2.0)

@@ -37,3 +37,13 @@ def test_paths_with_spaces_and_shell_characters_are_quoted():
 def test_label_volume_is_drawn_with_its_lookup_table():
     command = freeview_command(S, "mri/seg.mgz", None, overlay=True, lut=True)
     assert f"{S}/mri/seg.mgz:colormap=lut:opacity=0.4 -f" in command
+
+
+def test_a_folder_with_a_colon_is_entered_first_because_freeview_reads_colons_as_options():
+    from surfaceqa.freeview import freeview_command
+
+    command = freeview_command("/data/run:2/sub 07", "mri/wm.mgz", [1.0, 2.0, 3.0])
+    assert command.startswith("cd '/data/run:2/sub 07' && freeview -v mri/orig.mgz mri/wm.mgz -f ")
+    assert "surf/lh.white:edgecolor=blue" in command and "run:2" not in command.split("&&")[1]
+    plain = freeview_command("/data/sub-07", "mri/wm.mgz", [1.0, 2.0, 3.0])
+    assert plain.startswith("freeview -v /data/sub-07/mri/orig.mgz")

@@ -165,3 +165,18 @@ def test_every_table_says_whether_the_subject_was_edited(qa_reviewed, tmp_path):
         edited = {row["key"]: row["edited"] for row in rows}
         assert edited["fastsurfer__sub-01"] == "yes", name
         assert all(value == "no" for key, value in edited.items() if key != "fastsurfer__sub-01"), name
+
+
+def test_unknown_edit_state_is_exported_blank(qa_reviewed, tmp_path):
+    from surfaceqa.build import build_all
+    from surfaceqa.discover import find_subjects
+    from surfaceqa.layout import current_run_dir
+
+    (tmp_path / "freesurfer-8.2.0" / "sub-01" / "mri" / "wm.mgz").write_bytes(b"junk")
+    build_all(find_subjects([tmp_path / "freesurfer-8.2.0"]), qa_reviewed)
+    (current_run_dir(qa_reviewed, "fastsurfer__sub-02") / "provenance.json").unlink()
+    export_tables(qa_reviewed)
+    edited = {row["key"]: row["edited"] for row in _table(qa_reviewed, "indicators")}
+    assert edited["freesurfer-8.2.0__sub-01"] == ""  # could not be checked
+    assert edited["fastsurfer__sub-02"] == ""  # never recorded
+    assert edited["fastsurfer__sub-01"] == "no"

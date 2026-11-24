@@ -11,7 +11,15 @@ NO_FOLDER = "<subject folder>"
 
 
 def _path(subject_path: str, rel: str) -> str:
+    """A file of the subject; relative when the command first enters the subject folder."""
+    if _enters_folder(subject_path):
+        return shlex.quote(rel)
     return shlex.quote(f"{subject_path or NO_FOLDER}/{rel}")
+
+
+def _enters_folder(subject_path: str) -> bool:
+    """freeview reads a colon in a file name as the start of display options."""
+    return ":" in (subject_path or "")
 
 
 def _volumes(subject_path: str, edit: str | None, overlay: bool, lut: bool) -> list[str]:
@@ -44,4 +52,5 @@ def freeview_command(subject_path: str, edit: str | None, tkr, overlay: bool = F
     """The T1, the volume to edit and the four surfaces, with the cursor at `tkr` (surface RAS)."""
     words = ["freeview", "-v", *_volumes(subject_path, edit, overlay, lut), "-f",
              *_surfaces(subject_path), *_cursor(tkr), "-viewport", "coronal"]
-    return " ".join(words)
+    enter = f"cd {shlex.quote(subject_path)} && " if _enters_folder(subject_path) else ""
+    return enter + " ".join(words)

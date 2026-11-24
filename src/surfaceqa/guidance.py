@@ -61,7 +61,8 @@ def build_guidance(meta: dict, provenance: dict | None, marks: list[dict],
     if not marks:
         return None
     provenance = provenance or {"command": None, "edited": False, "evidence": []}
-    reruns = rerun_commands(meta["pipeline"], provenance["command"], meta["name"], template)
+    reruns = rerun_commands(meta["pipeline"], provenance["command"], meta["name"], template,
+                            more=provenance.get("stages", [])[1:])
     block = load_recipes()["pipelines"].get(meta["pipeline"], NO_PIPELINE)
     return {"warning": version_warning(meta["pipeline"], meta.get("version")),
             "problems": [_problem(mark, meta, reruns) for mark in sorted(marks, key=_checklist_position)],

@@ -195,8 +195,9 @@ def _copy_static(qa_dir: Path) -> None:
 
 def _write_viewers(qa_dir: Path, record: dict) -> None:
     for meta in run_metas(qa_dir, record["key"]):
-        folder = qa_dir / "subjects" / record["key"] / "runs" / meta["run"]
-        (folder / VIEWER_PAGE).write_text(render_viewer(record, meta))
+        if meta.get("run"):
+            folder = qa_dir / "subjects" / record["key"] / "runs" / meta["run"]
+            (folder / VIEWER_PAGE).write_text(render_viewer(record, meta))
 
 
 def write_site(qa_dir: Path) -> None:

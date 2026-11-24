@@ -648,3 +648,35 @@ def test_subject_page_without_candidates_has_no_comparison(tmp_path):
     write_site(qa)
     page = (qa / "subjects" / "fs__sub-01" / "index.html").read_text()
     assert "compare-with" not in page and "<iframe" not in page and page.count("<canvas") == 3
+
+
+# ---- the edited flag: unknown, and held back in a blind review ------------------------------
+
+def _edit_recon(qa, tmp_path):
+    source = tmp_path / "freesurfer-8.2.0"
+    (source / "sub-01" / "tmp").mkdir()
+    (source / "sub-01" / "tmp" / "control.dat").write_text("0 0 0\n")
+    build_all(find_subjects([source]), qa)
+
+
+def test_unknown_edit_state_is_shown_as_unknown_not_as_edited(qa_reviewed, tmp_path):
+    source = tmp_path / "freesurfer-8.2.0"
+    (source / "sub-01" / "mri" / "wm.mgz").write_bytes(b"junk")
+    build_all(find_subjects([source]), qa_reviewed)
+    page = _page(qa_reviewed, RECON)
+    assert "<dt>Edited</dt><dd>unknown: mri/wm.mgz could not be read" in page
+    assert "edited" not in _row(_index(qa_reviewed), RECON)
+
+
+def test_a_blind_reviewer_does_not_see_the_edited_flag_before_submitting(qa_reviewed, tmp_path):
+    _edit_recon(qa_reviewed, tmp_path)
+    _major(qa_reviewed, "dan", submitted=False)
+    waiting = _page(qa_reviewed, RECON, "dan", blind=True)
+    assert "<dt>Edited</dt>" not in waiting and "control.dat" not in waiting
+    assert "already been edited" not in waiting and "Fix guidance" in waiting
+    assert "edited" not in _row(_index(qa_reviewed, "dan", blind=True), RECON)
+    _major(qa_reviewed, "dan")
+    done = _page(qa_reviewed, RECON, "dan", blind=True)
+    assert "<dt>Edited</dt>" in done and "already been edited" in done
+    assert "edited" in _row(_index(qa_reviewed, "dan", blind=True), RECON)
+    assert "<dt>Edited</dt>" in _page(qa_reviewed, RECON, "eve")  # not a blind review

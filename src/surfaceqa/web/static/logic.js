@@ -253,3 +253,8 @@ export function cursorFromMessage(message, meta) {
   if (!isPoint(point) || !toGrid) return null;
   return applyAffine(toGrid, point).map(Math.round);
 }
+
+// How long to wait before trying a failed save again: 2 s, doubling, at most 30 s.
+export function retryDelay(failures) {
+  return Math.min(30000, 1000 * 2 ** Math.min(failures, 10));
+}

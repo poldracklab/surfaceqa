@@ -116,7 +116,9 @@ def test_a_failed_cohort_pass_keeps_the_viewers_and_the_other_indicators(source,
     qa = tmp_path / "qa"
     statuses = _build(source, qa)
     assert set(statuses.values()) == {"built"}
-    assert _cohort_indicator(qa, "fs__sub-00")["status"] == "not run"
+    listed = _cohort_indicator(qa, "fs__sub-00")
+    assert listed["status"] == "not run" and "failed" in listed["reason"]
+    assert "cohort/error.txt" in listed["reason"] and "there are 0" not in listed["reason"]
     ran = [i for i in load_findings(qa, "fs__sub-00")["indicators"] if i["status"] == "ran"]
     assert len(ran) >= 5
     assert "ZeroDivisionError" in (qa / "cohort" / "error.txt").read_text()
@@ -176,3 +178,28 @@ def test_a_bad_registration_sphere_costs_one_hemisphere_not_the_other_indicators
     listed = _cohort_indicator(qa, "fs__sub-00")
     assert listed["status"] == "ran" and listed["reason"].startswith("rh not checked")
     assert len(_cohort_findings(qa, f"fs__{PLANTED}")) == 1
+
+
+def test_a_build_of_some_subjects_updates_the_rest_of_a_folder_whose_cohort_changed(source, tmp_path):
+    qa = tmp_path / "qa"
+    refs = find_subjects([source])
+    first = [r for r in refs if r.name != "sub-05"]
+    build_all(first[:4], qa)  # four subjects: too few
+    assert "there are 4" in _cohort_indicator(qa, f"fs__{PLANTED}")["reason"]
+    results = {r.key: r.status for r in build_all([first[4]], qa)}  # as with --subjects
+    assert results.pop(first[4].key) == "built"
+    assert set(results.values()) == {"updated"} and len(results) == 4
+    assert len(_cohort_findings(qa, f"fs__{PLANTED}")) == 1
+    assert _cohort_indicator(qa, "fs__sub-00")["status"] == "ran"
+
+
+def test_a_build_of_one_source_leaves_the_other_sources_alone(source, tmp_path):
+    other = tmp_path / "other"
+    _add_subject(other, 0)
+    qa = tmp_path / "qa"
+    build_all(find_subjects([source, other]), qa)
+    path = current_run_dir(qa, "other__sub-00") / "findings.json"
+    stamp = path.stat().st_mtime_ns
+    _add_subject(source, 6)
+    results = [r.key for r in build_all(find_subjects([source]), qa)]
+    assert len(results) == 7 and path.stat().st_mtime_ns == stamp

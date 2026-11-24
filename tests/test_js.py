@@ -23,3 +23,12 @@ def test_pressing_the_mouse_in_a_checklist_section_does_not_scroll_it():
     (press,) = [line for line in source.splitlines() if '"pointerdown"' in line]
     assert "setCurrent(index, {scroll: false})" in press
     assert "if (scroll) itemEls[index].scrollIntoView" in source
+
+
+def test_a_failed_save_is_scheduled_again():
+    """No browser in the suite: guards that the save failure paths ask for a retry and that a
+    success clears the count."""
+    source = (Path(__file__).parent.parent / "src/surfaceqa/web/static/review.js").read_text()
+    save = source[source.index("async function saveNow"):source.index("function queueSave")]
+    assert save.count("retryLater()") == 2 and "state.failures = 0" in save
+    assert "L.retryDelay(state.failures)" in source

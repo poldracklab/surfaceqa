@@ -190,3 +190,18 @@ def test_partial_cohort_coverage_is_stated():
     assert result.status == "ran"
     assert "lh: cohort values at 5" in result.reason and "% of cortex vertices" in result.reason
     assert "rh" not in result.reason
+
+
+def test_a_cortex_label_naming_vertices_that_do_not_exist_leaves_the_hemisphere_out():
+    # the thickness map leaves such a hemisphere out of the cohort; the comparison does the same
+    bad, good = hemi(), hemi()
+    bad.thickness[top(bad)] = 5.0
+    bad.cortex = np.append(bad.cortex, len(bad.thickness) + 10)
+    result = cohort_thickness(data_with(cohort(), lh=bad, rh=good))
+    assert result.findings == [] and result.reason.startswith("lh not checked")
+
+
+def test_a_cohort_that_could_not_be_computed_says_so():
+    failed = Cohort("fs", 0, "failed", None, None, note="the comparison failed in this build")
+    result = cohort_thickness(data_with(failed, lh=hemi()))
+    assert result.status == "not run" and result.reason == "the comparison failed in this build"

@@ -108,3 +108,44 @@ def test_recon_all_status_lines_are_not_commands(tmp_path):
         "recon-all -s sub-01 exited with ERRORS at Mon Nov  2 11:00:00\n")
     assert original_command(subj, "freesurfer") is None
     assert "<" in rerun_commands("freesurfer", original_command(subj, "freesurfer"), "sub-01")["pial"]
+
+
+# ---- options a rerun must not repeat, however they were spelled ----------------------------
+
+def test_recon_all_rerun_drops_inputs_spelled_in_lower_case_or_with_two_dashes():
+    command = "recon-all --s sub-07 -i a.nii.gz -t2 t2.mgz -flair f.mgz -T2pial -all -openmp 8"
+    assert rerun_commands("freesurfer", command, "sub-07")["pial"] == (
+        "recon-all -s sub-07 -autorecon-pial -T2pial -openmp 8")
+
+
+def test_recon_all_rerun_drops_the_add_ons_of_the_first_run():
+    command = ("recon-all -s sub-07 -i a.nii.gz -all -brainstem-structures -hippocampal-subfields-T1 "
+               "-hippocampal-subfields-T2 t2.nii.gz T2 -hippocampal-subfields-T1T2 t2.nii.gz T1T2 "
+               "-qcache -3T")
+    assert rerun_commands("freesurfer", command, "sub-07")["wm"] == (
+        "recon-all -s sub-07 -autorecon2-wm -autorecon3 -3T")
+
+
+def test_recon_all_rerun_takes_options_from_every_stage_of_a_first_run_done_in_stages():
+    first = "recon-all -s sub-07 -i a.nii.gz -autorecon1 -3T -openmp 8"
+    later = ["recon-all -s sub-07 -autorecon2 -3T -openmp 8",
+             "recon-all -s sub-07 -autorecon3 -T2 t2.mgz -T2pial -openmp 4"]
+    runs = rerun_commands("freesurfer", first, "sub-07", more=later)
+    assert runs["pial"] == "recon-all -s sub-07 -autorecon-pial -3T -openmp 8 -T2pial"
+
+
+def test_recon_all_rerun_of_a_longitudinal_subject_keeps_its_long_form():
+    command = "recon-all -long tp1 base -all -3T"
+    assert rerun_commands("freesurfer", command, "tp1.long.base")["pial"] == (
+        "recon-all -long tp1 base -autorecon-pial -3T")
+
+
+def test_first_run_stages_stop_at_the_first_rerun_after_an_edit(tmp_path):
+    from surfaceqa.invocation import first_run_commands
+
+    lines = ["recon-all -s sub-01 -i a.nii.gz -autorecon1", "recon-all -s sub-01 -autorecon2 -T2pial",
+             "recon-all -s sub-01 -autorecon2-cp -autorecon3", "recon-all -s sub-01 -autorecon3 -qcache"]
+    subj = write_subject(tmp_path / "fs", pipeline="freesurfer", command=None)
+    (subj / "scripts" / "recon-all.log").write_text("\n".join(lines) + "\n")
+    assert first_run_commands(subj, "freesurfer") == lines[:2]
+    assert first_run_commands(tmp_path / "nothing", "freesurfer") == []

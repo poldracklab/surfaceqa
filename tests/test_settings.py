@@ -29,3 +29,13 @@ def test_malformed_settings_are_ignored_and_replaced(tmp_path, content):
     assert rerun_template(tmp_path, "fastsurfer") is None
     save_rerun_template(tmp_path, ["fastsurfer"], TEMPLATE)
     assert rerun_template(tmp_path, "fastsurfer") == TEMPLATE
+
+
+def test_a_stored_template_without_the_placeholder_is_ignored(tmp_path):
+    import json
+    from surfaceqa.settings import rerun_template
+
+    (tmp_path / "settings.json").write_text(json.dumps(
+        {"rerun_templates": {"a": "docker run image", "b": "docker run image {command}"}}))
+    assert rerun_template(tmp_path, "a") is None
+    assert rerun_template(tmp_path, "b") == "docker run image {command}"

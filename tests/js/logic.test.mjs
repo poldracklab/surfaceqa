@@ -4,7 +4,7 @@ import {
   sliceSegments, gridToScreen, screenToGrid, clampSlice, crosshairs, initialCursor, fit, zoomAt,
   isHideKey, findingVoxelsOnSlice, zoomTo, resizeView, stepIndex, visiblePlanes, contourBounds, fitBox,
   nearestOnContours, marksOnSlice, itemsRemaining, levelForKey, stepItem, screenToGridExact, isTyping,
-  applyAffine, invertAffine, positionMessage, cursorFromMessage,
+  applyAffine, invertAffine, positionMessage, cursorFromMessage, retryDelay,
 } from "../../src/surfaceqa/web/static/logic.js";
 
 const coronal = {axis: 1, h_axis: 0, v_axis: 2, h_flip: true, v_flip: true, width: 32, height: 40, n_slices: 48};
@@ -261,4 +261,8 @@ test("messages that are not positions are ignored", () => {
     assert.equal(cursorFromMessage(bad, one), null);
   }
   assert.equal(cursorFromMessage(good, {}), null);
+});
+
+test("a failed save is tried again, less often each time, at most every 30 seconds", () => {
+  assert.deepEqual([1, 2, 3, 4, 5, 6, 20].map(retryDelay), [2000, 4000, 8000, 16000, 30000, 30000, 30000]);
 });

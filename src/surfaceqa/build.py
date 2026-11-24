@@ -12,7 +12,7 @@ from pathlib import Path
 import nibabel as nib
 import numpy as np
 
-from surfaceqa.cohort import Cohort, load_cohort, update_cohorts
+from surfaceqa.cohort import Cohort, failed_cohort, load_cohort, update_cohorts
 from surfaceqa.contours import SURFACE_ORDER, pack_plane, plane_segments
 from surfaceqa.discover import SubjectRef
 from surfaceqa.fingerprint import surface_fingerprint
@@ -215,26 +215,44 @@ def _safe_prepare(qa_dir: Path, ref: SubjectRef) -> BuildResult:
         return _failed(qa_dir, ref)
 
 
-def _safe_indicators(qa_dir: Path, compare: bool, job: tuple[SubjectRef, BuildResult]) -> BuildResult:
+def _safe_indicators(qa_dir: Path, compared: bool, job: tuple[SubjectRef, BuildResult]) -> BuildResult:
     ref, result = job
     try:
-        cohort = load_cohort(qa_dir, ref.source) if compare else None
+        cohort = load_cohort(qa_dir, ref.source) if compared else failed_cohort(ref.source)
         return _run_indicators(ref, qa_dir, result, cohort)
     except Exception:
         return _failed(qa_dir, ref)
 
 
-def _safe_cohorts(qa_dir: Path) -> bool:
-    """Bring the cohort statistics up to date; False (and a note) when that failed."""
+def _safe_cohorts(qa_dir: Path) -> set[str] | None:
+    """Bring the cohort statistics up to date. Returns the source folders whose statistics
+    changed, or None (and leaves a note) when that failed."""
     error_file = qa_dir / "cohort" / "error.txt"
     try:
-        update_cohorts(qa_dir)
+        changed = update_cohorts(qa_dir)
         error_file.unlink(missing_ok=True)
-        return True
+        return changed
     except Exception:
         error_file.parent.mkdir(parents=True, exist_ok=True)
         error_file.write_text(traceback.format_exc())
-        return False
+        return None
+
+
+def _also_affected(qa_dir: Path, changed: set[str], built: list[SubjectRef]) -> list[tuple[SubjectRef, BuildResult]]:
+    """Subjects that were not asked for but whose cohort changed, so their comparison is stale.
+
+    A build of some subjects (`--subjects`) changes what every subject of the folder is
+    compared with. Only subjects whose source folder is still there can be recomputed.
+    """
+    asked, jobs = {ref.key for ref in built}, []
+    root = qa_dir / "subjects"
+    for folder in sorted(p for p in root.iterdir() if p.is_dir()) if root.is_dir() else []:
+        meta = load_meta(qa_dir, folder.name)
+        if (meta and folder.name not in asked and meta.get("source") in changed
+                and Path(meta.get("path") or "\0").is_dir()):
+            ref = SubjectRef(meta["source"], meta["name"], Path(meta["path"]))
+            jobs.append((ref, BuildResult(ref.key, "unchanged", run=meta["run"])))
+    return jobs
 
 
 def _each(function, items: list, pool: ProcessPoolExecutor | None) -> list:
@@ -244,12 +262,14 @@ def _each(function, items: list, pool: ProcessPoolExecutor | None) -> list:
 def _build_passes(refs: list[SubjectRef], qa_dir: Path, pool: ProcessPoolExecutor | None) -> list[BuildResult]:
     """Each subject on its own, then the cohort statistics, then the indicators that use them."""
     prepared = _each(partial(_safe_prepare, qa_dir), refs, pool)
-    compare = _safe_cohorts(qa_dir)
-    return _each(partial(_safe_indicators, qa_dir, compare), list(zip(refs, prepared)), pool)
+    changed = _safe_cohorts(qa_dir)
+    jobs = list(zip(refs, prepared)) + _also_affected(qa_dir, changed or set(), refs)
+    return _each(partial(_safe_indicators, qa_dir, changed is not None), jobs, pool)
 
 
 def build_all(refs: list[SubjectRef], qa_dir: Path, jobs: int = 1) -> list[BuildResult]:
-    """Build every subject; results come back in the order of refs."""
+    """Build every subject; results come back in the order of refs, followed by any other
+    subjects whose cohort comparison had to be redone."""
     qa_dir = Path(qa_dir)
     if jobs <= 1:
         return _build_passes(refs, qa_dir, None)

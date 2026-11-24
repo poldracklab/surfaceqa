@@ -11,7 +11,8 @@ import numpy as np
 
 from surfaceqa import thresholds
 from surfaceqa.layout import current_run_dir, read_json
-from surfaceqa.thickness_map import HEMIS, load_thickness_map, map_signature
+from surfaceqa.pipelines import HEMIS
+from surfaceqa.thickness_map import load_thickness_map, map_signature
 
 COHORT_VERSION = 1  # raise when the statistics change, so they are computed again
 MAD_TO_SD = 1.4826
@@ -24,6 +25,7 @@ class Cohort:
     signature: str
     median: dict[str, np.ndarray] | None  # None while there are too few subjects
     spread: dict[str, np.ndarray] | None  # robust standard deviation
+    note: str = ""  # why there are no statistics, when it is not for lack of subjects
 
 
 def _folder(qa_dir: Path) -> Path:
@@ -95,13 +97,20 @@ def _write_statistics(path: Path, members: dict[str, Path]) -> None:
     os.replace(partial, path)
 
 
+def failed_cohort(source: str) -> Cohort:
+    """What a subject is given when the statistics could not be computed in this build."""
+    return Cohort(source, 0, "failed", None, None,
+                  note="the comparison failed in this build (see cohort/error.txt in the QA directory)")
+
+
 def _update_source(qa_dir: Path, source: str, members: dict[str, Path]) -> bool:
     """Bring one source folder's statistics up to date; True when they changed."""
     folder = _folder(qa_dir)
     signature = _signature(members)
     stored = read_json(folder / f"{source}.json") or {}
     switched_on = len(members) >= thresholds.MIN_COHORT
-    if stored.get("signature") == signature and (folder / f"{source}.npz").is_file() == switched_on:
+    usable = _read_statistics(folder / f"{source}.npz") is not None
+    if stored.get("signature") == signature and usable == switched_on:
         return False
     folder.mkdir(parents=True, exist_ok=True)
     if switched_on:

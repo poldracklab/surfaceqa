@@ -8,9 +8,9 @@ import numpy as np
 
 from surfaceqa.cohort import Cohort
 from surfaceqa.geometry import load_display_volume, to_grid
-from surfaceqa.pipelines import PipelineInfo, subject_files
+from surfaceqa.layout import file_signature
+from surfaceqa.pipelines import HEMIS, PipelineInfo, subject_files
 
-HEMIS = ("lh", "rh")
 SEG_FILE = {"fastsurfer": "aparc.DKTatlas+aseg.deep.mgz"}
 DEFAULT_SEG_FILE = "aseg.presurf.mgz"
 NONBRAIN_FILES = {"fastsurfer": ()}
@@ -125,13 +125,7 @@ def _input_files(pipeline: PipelineInfo) -> list[str]:
 
 def input_signature(subject_dir: Path, pipeline: PipelineInfo) -> dict[str, list[int]]:
     """Size and modification time of each indicator input that exists, to detect changes."""
-    signature = {}
-    for rel in _input_files(pipeline):
-        path = Path(subject_dir) / rel
-        if path.is_file():
-            stat = path.stat()
-            signature[rel] = [stat.st_size, stat.st_mtime_ns]
-    return signature
+    return file_signature(subject_dir, _input_files(pipeline))
 
 
 def load_subject_data(subject_dir: Path, pipeline: PipelineInfo,
