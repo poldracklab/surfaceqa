@@ -51,3 +51,29 @@ def test_surface_sits_on_sphere_edge_in_grid(synth_subject):
     outside = vol.data[tuple(np.round(to_grid(verts * 1.1, vol.tkr_to_grid)).astype(int).T)]
     assert (inside > 0).all()
     assert (outside == 0).all()
+
+
+def test_grid_to_scanner_agrees_with_the_image_affine(tmp_path):
+    subj = write_subject(tmp_path / "s", orientation="PIR", voxel=(1.0, 0.7, 1.3),
+                         cras=(3.0, -2.0, 5.0))
+    path = subj / "mri" / "orig.mgz"
+    vol, img = load_display_volume(path), nib.load(path)
+    assert vol.grid_to_scanner.shape == (4, 4)
+    # find a recognisable voxel in both arrays: the display data is a reordering of the file data
+    file_data = np.asarray(img.dataobj)
+    marked = file_data.astype(float) + np.arange(file_data.size).reshape(file_data.shape) * 1e-3
+    nib.save(nib.MGHImage(marked.astype(np.float32), img.affine, img.header), path)
+    vol = load_display_volume(path)
+    file_index = np.array([5, 9, 13])
+    value = np.asarray(nib.load(path).dataobj)[tuple(file_index)]
+    grid_index = np.argwhere(vol.data == value)[0]
+    expected = img.affine @ np.append(file_index, 1.0)
+    assert np.allclose(vol.grid_to_scanner @ np.append(grid_index, 1.0), expected, atol=1e-4)
+
+
+def test_scanner_and_surface_coordinates_differ_by_cras(tmp_path):
+    subj = write_subject(tmp_path / "s", cras=(3.0, -2.0, 5.0), orientation="LPS")
+    vol = load_display_volume(subj / "mri" / "orig.mgz")
+    grid_to_tkr = np.linalg.inv(vol.tkr_to_grid)
+    assert np.allclose(vol.grid_to_scanner[:3, :3], grid_to_tkr[:3, :3])
+    assert np.allclose(vol.grid_to_scanner[:3, 3] - grid_to_tkr[:3, 3], [3.0, -2.0, 5.0], atol=1e-4)
