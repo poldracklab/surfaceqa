@@ -613,9 +613,12 @@ def test_viewer_page_of_something_that_is_not_a_run_is_404(qa_reviewed, key, run
 
 
 def test_viewer_page_of_another_subjects_run_is_404(qa_reviewed):
-    other = current_run_dir(qa_reviewed, "freesurfer-8.2.0__sub-01").name
-    assert other != current_run_dir(qa_reviewed, FIRST).name
-    assert _client(qa_reviewed).get(_viewer(FIRST, other)).status_code == 404
+    theirs = current_run_dir(qa_reviewed, RECON)
+    only_theirs = theirs.parent / "aaaaaaaaaaaa"  # synthetic subjects can share a run name
+    only_theirs.mkdir()
+    (only_theirs / "meta.json").write_text((theirs / "meta.json").read_text())
+    assert _client(qa_reviewed).get(_viewer(RECON, only_theirs.name)).status_code == 200
+    assert _client(qa_reviewed).get(_viewer(FIRST, only_theirs.name)).status_code == 404
 
 
 def test_blind_viewer_page_needs_a_name_and_hides_findings_until_submitted(qa_reviewed):

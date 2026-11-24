@@ -107,3 +107,22 @@ ul.missing { color: #ffd866; font-size: 13px; padding-left: 18px; margin: 4px 0;
 .command { display: flex; align-items: flex-start; gap: 8px; margin: 2px 0 6px; }
 .command pre { flex: 1; margin: 0; padding: 6px 8px; background: #111; border: 1px solid #333; border-radius: 4px; font-size: 12px; white-space: pre-wrap; overflow-wrap: anywhere; }
 .command .copy { flex: none; font-size: 12px; }
+
+/* comparing two reconstructions: the second viewer is a frame under the first (three views)
+   or beside it (one view) */
+#compare-with { max-width: 16em; }
+#compare { display: flex; flex-direction: column; min-height: 0; min-width: 0; border-top: 2px solid var(--line, #444); }
+#compare[hidden] { display: none; }
+#compare iframe { flex: 1; min-height: 0; width: 100%; border: 0; }
+#compare .note { margin: 2px 0 0; font-size: 12px; }
+.viewer.comparing { display: grid; grid-template-columns: minmax(0, 1fr); grid-template-rows: auto minmax(0, 1fr) minmax(0, 1fr) auto; }
+.viewer.comparing > #compare { grid-row: 3; }
+.viewer.comparing > .keys { grid-row: 4; }
+.viewer.comparing.single { grid-template-columns: repeat(2, minmax(0, 1fr)); grid-template-rows: auto minmax(0, 1fr) auto; column-gap: 6px; }
+.viewer.comparing.single > .toolbar, .viewer.comparing.single > .keys { grid-column: 1 / -1; }
+.viewer.comparing.single > #compare { grid-row: 2; grid-column: 2; border-top: 0; }
+.viewer.comparing.single > .keys { grid-row: 3; }
+body.embedded { margin: 0; padding: 0 0 2px; height: 100vh; display: flex; flex-direction: column; overflow: hidden; }
+body.embedded .viewer { flex: 1; }
+body.embedded .embedded-title { margin: 2px 4px; font-size: 12px; }
+body.embedded .layouts, body.embedded .keys, body.embedded #reset-view { display: none; }

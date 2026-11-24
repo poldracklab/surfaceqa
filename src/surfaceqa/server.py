@@ -11,10 +11,12 @@ from fastapi.responses import (FileResponse, HTMLResponse, JSONResponse, PlainTe
                                RedirectResponse)
 from fastapi.staticfiles import StaticFiles
 
+from surfaceqa.layout import read_json
 from surfaceqa.reviews import valid_reviewer
 from surfaceqa.server_reviews import (Refused, current_review, has_submitted, next_subject,
                                       store_review)
-from surfaceqa.site import View, render_guidance, render_index, render_subject, subject_records
+from surfaceqa.site import (View, render_guidance, render_index, render_subject, render_viewer,
+                            subject_records)
 
 COOKIE = "surfaceqa_reviewer"
 ONE_YEAR = 365 * 24 * 3600
@@ -169,6 +171,20 @@ def build_error(request: Request, key: str):
     if not path.is_file():
         raise HTTPException(404)
     return PlainTextResponse(path.read_text(errors="replace"))
+
+
+@router.get("/subjects/{key}/runs/{run}/viewer.html", response_class=HTMLResponse)
+def run_viewer(request: Request, key: str, run: str):
+    """The viewer of one run on its own, shown beside another subject for comparison."""
+    view = _view(request)
+    if view.blind and view.reviewer is None:
+        raise HTTPException(404)
+    record = _record(request, key)
+    folder = _qa_dir(request) / "subjects" / record["key"] / "runs" / run
+    meta = read_json(folder / "meta.json") if RUN_NAME.fullmatch(run) else None
+    if meta is None:
+        raise HTTPException(404)
+    return render_viewer(record, meta, view)
 
 
 @router.get("/subjects/{key}/runs/{run}/{name:path}")

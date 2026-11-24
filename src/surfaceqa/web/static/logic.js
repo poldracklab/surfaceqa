@@ -205,3 +205,51 @@ export function isTyping(target) {
   if (target.tagName === "TEXTAREA" || target.tagName === "SELECT") return true;
   return target.tagName === "INPUT" && !["radio", "checkbox", "range", "button"].includes(target.type);
 }
+
+// ---- linking two viewers ------------------------------------------------------------------
+
+// A point through a 4x4 matrix given as rows (the last row is 0, 0, 0, 1).
+export function applyAffine(m, p) {
+  return [0, 1, 2].map((r) => m[r][0] * p[0] + m[r][1] * p[1] + m[r][2] * p[2] + m[r][3]);
+}
+
+// The inverse of such a matrix, or null when there is none.
+export function invertAffine(m) {
+  if (!Array.isArray(m)) return null;
+  const [[a, b, c], [d, e, f], [g, h, i]] = m;
+  const det = a * (e * i - f * h) - b * (d * i - f * g) + c * (d * h - e * g);
+  if (!Number.isFinite(det) || Math.abs(det) < 1e-12) return null;
+  const inv = [
+    [(e * i - f * h) / det, (c * h - b * i) / det, (b * f - c * e) / det],
+    [(f * g - d * i) / det, (a * i - c * g) / det, (c * d - a * f) / det],
+    [(d * h - e * g) / det, (b * g - a * h) / det, (a * e - b * d) / det],
+  ];
+  const shift = [m[0][3], m[1][3], m[2][3]];
+  const rows = inv.map((row) => [...row, -(row[0] * shift[0] + row[1] * shift[1] + row[2] * shift[2])]);
+  return [...rows, [0, 0, 0, 1]];
+}
+
+const POSITION = "surfaceqa:position";
+
+// What one viewer tells the other: where its cursor is, in scanner coordinates when the run
+// has them and in surface (tkr) coordinates, and which views it shows.
+export function positionMessage(cursor, meta, layout) {
+  const scanner = meta.grid_to_scanner ? applyAffine(meta.grid_to_scanner, cursor) : null;
+  return {type: POSITION, scanner, tkr: applyAffine(meta.grid_to_tkr, cursor), layout};
+}
+
+function isPoint(p) {
+  return Array.isArray(p) && p.length === 3 && p.every((v) => typeof v === "number" && Number.isFinite(v));
+}
+
+// The voxel of this run at the position another viewer sent, or null when the message is not
+// a usable position. Scanner coordinates are used when both runs have them; an earlier run
+// without them is assumed to share the surface coordinates of the run it is compared with.
+export function cursorFromMessage(message, meta) {
+  if (!message || message.type !== POSITION) return null;
+  const byScanner = isPoint(message.scanner) && meta.grid_to_scanner;
+  const point = byScanner ? message.scanner : message.tkr;
+  const toGrid = invertAffine(byScanner ? meta.grid_to_scanner : meta.grid_to_tkr);
+  if (!isPoint(point) || !toGrid) return null;
+  return applyAffine(toGrid, point).map(Math.round);
+}

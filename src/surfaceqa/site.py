@@ -12,6 +12,7 @@ from jinja2 import Environment, PackageLoader, select_autoescape
 
 from surfaceqa.build import load_meta
 from surfaceqa.layout import current_run_dir
+from surfaceqa.compare import VIEWER_PAGE, candidates, run_metas
 from surfaceqa.checklist import checklist_sections, finding_text, scored_findings
 from surfaceqa.protocol import load_protocol
 from surfaceqa.qa import load_findings
@@ -139,6 +140,8 @@ def subject_records(qa_dir: Path, view: View = View()) -> list[dict]:
     folders = sorted(p for p in root.iterdir() if p.is_dir()) if root.is_dir() else []
     records = [_subject_record(qa_dir, folder, view) for folder in folders]
     _add_ranks(records)
+    for record in records:
+        record["compare"] = candidates(qa_dir, record, records)
     return _ordered([_hide_indicators(record) for record in records], view)
 
 
@@ -160,7 +163,21 @@ def render_subject(record: dict, view: View = View()) -> str:
     name = "subject.html" if record["has_run"] else NO_RUN_TEMPLATE[record["status"]]
     here = f"/subjects/{quote(record['key'])}/"
     template = _environment().get_template("name.html" if _needs_name(view) else name)
-    return template.render(subject=record, views=VIEW_ORDER, **_context(view, "../../", here))
+    run_url = f"runs/{record['run']}/" if record["has_run"] else ""
+    return template.render(subject=record, views=VIEW_ORDER, run_url=run_url, embedded=False,
+                           **_context(view, "../../", here))
+
+
+def render_viewer(record: dict, meta: dict, view: View = View()) -> str:
+    """One run of a subject as a viewer and nothing else, to be shown beside another subject.
+
+    `meta` is the run's own: an earlier run may be of another pipeline version than the current one.
+    """
+    version = f" {meta['version']}" if meta.get("version") else ""
+    return _environment().get_template("viewer.html").render(
+        subject=record, views=VIEW_ORDER, run_url="", embedded=True,
+        pipeline_label=f"{meta.get('pipeline', 'unknown')}{version}",
+        built=meta.get("built", "")[:10], **_context(view, "../../../../", ""))
 
 
 def render_guidance(record: dict, view: View = View()) -> str:
@@ -176,6 +193,12 @@ def _copy_static(qa_dir: Path) -> None:
         shutil.copytree(path, qa_dir / "static", dirs_exist_ok=True)
 
 
+def _write_viewers(qa_dir: Path, record: dict) -> None:
+    for meta in run_metas(qa_dir, record["key"]):
+        folder = qa_dir / "subjects" / record["key"] / "runs" / meta["run"]
+        (folder / VIEWER_PAGE).write_text(render_viewer(record, meta))
+
+
 def write_site(qa_dir: Path) -> None:
     """The read-only pages: what `surfaceqa serve` shows to someone who has not given a name."""
     qa_dir = Path(qa_dir)
@@ -183,4 +206,5 @@ def write_site(qa_dir: Path) -> None:
     _copy_static(qa_dir)
     for record in records:
         (qa_dir / "subjects" / record["key"] / "index.html").write_text(render_subject(record))
+        _write_viewers(qa_dir, record)
     (qa_dir / "index.html").write_text(render_index(records))
