@@ -117,7 +117,7 @@ def _input_files(pipeline: PipelineInfo) -> list[str]:
     mri = ["ribbon.mgz", "lh.ribbon.mgz", "rh.ribbon.mgz", "norm.mgz", PARC_FILE, SYNTHSEG_FILE,
            SEG_FILE.get(pipeline.name, DEFAULT_SEG_FILE),
            *NONBRAIN_FILES.get(pipeline.name, DEFAULT_NONBRAIN_FILES)]
-    surf = [f"{hemi}.{name}" for hemi in HEMIS 
+    surf = [f"{hemi}.{name}" for hemi in HEMIS
             for name in ("thickness", "defect_labels", "orig.nofix", "sphere.reg")]
     return [f"mri/{f}" for f in mri] + [f"surf/{f}" for f in surf] + [
         f"label/{hemi}.cortex.label" for hemi in HEMIS]

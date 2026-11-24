@@ -157,7 +157,10 @@ as a finding, "thicker than the cohort": often a place where the pial surface to
 dura. Below 30 subjects the subject page says that this indicator did not run.
 
 Adding or rebuilding a subject changes the comparison for the whole folder, so the next `build`
-recomputes the indicators of that folder's subjects. Slices and contours are not redone.
+recomputes the indicators of that folder's subjects. Slices and contours are not redone. A build
+limited with `--subjects` updates only the subjects it names; the others catch up on the next
+full build. A subject whose folder was deleted from the source, or whose latest build failed,
+no longer counts.
 
 ## What is in a QA directory
 

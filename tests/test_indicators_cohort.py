@@ -96,7 +96,8 @@ def test_points_without_a_usable_spread_are_not_compared(spread):
     c = cohort()
     c.spread["lh"][:] = spread
     result = cohort_thickness(data_with(c, lh=h))
-    assert result.status == "ran" and result.findings == []
+    # nothing could be compared, and the result says so instead of reading as "nothing found"
+    assert result.status == "not run" and result.findings == [] and "no cohort values" in result.reason
 
 
 @pytest.mark.parametrize("cohort_,count", [(None, 0), (Cohort("fs", 4, "sig", None, None), 4)])

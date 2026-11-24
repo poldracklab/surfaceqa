@@ -30,15 +30,30 @@ def _folder(qa_dir: Path) -> Path:
     return Path(qa_dir) / "cohort"
 
 
+def _member(qa_dir: Path, folder: Path) -> tuple[str, Path] | None:
+    """The source and current run of a subject that belongs to a cohort, or None.
+
+    A subject belongs while its latest build succeeded, its run has a thickness map and
+    its folder is still where it was built from: a reconstruction that was deleted or
+    that can no longer be built must not keep shaping what the others are compared with.
+    """
+    if (folder / "missing.json").exists() or (folder / "error.txt").exists():
+        return None
+    run_dir = current_run_dir(qa_dir, folder.name)
+    meta = read_json(run_dir / "meta.json") if run_dir is not None else None
+    if not meta or not meta.get("source") or not Path(meta.get("path") or "\0").is_dir():
+        return None
+    return (meta["source"], run_dir) if map_signature(run_dir) is not None else None
+
+
 def _members(qa_dir: Path) -> dict[str, dict[str, Path]]:
-    """source -> {subject key: current run folder}, for the runs that have a thickness map."""
+    """source -> {subject key: current run folder} for the subjects that belong to its cohort."""
     root = Path(qa_dir) / "subjects"
     sources: dict[str, dict[str, Path]] = {}
     for folder in sorted(p for p in root.iterdir() if p.is_dir()) if root.is_dir() else []:
-        members = sources.setdefault(folder.name.partition("__")[0], {})
-        run_dir = current_run_dir(qa_dir, folder.name)
-        if run_dir is not None and map_signature(run_dir) is not None:
-            members[folder.name] = run_dir
+        found = _member(Path(qa_dir), folder)
+        if found is not None:
+            sources.setdefault(found[0], {})[folder.name] = found[1]
     return sources
 
 

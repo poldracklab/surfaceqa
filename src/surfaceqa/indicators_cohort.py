@@ -11,6 +11,8 @@ from surfaceqa.sphere import nearest, target_points
 from surfaceqa.subjectdata import HemiSurface, SubjectData
 
 NAME, KIND = "cohort_thickness", "thickness"
+FULL_COVERAGE = 0.9  # below this share of the cortex, the result says how much was compared
+WHY_SKIPPED = "no usable sphere.reg, thickness and cortex label, or no cohort values"
 
 
 def _too_few(cohort: Cohort | None) -> str:
@@ -18,29 +20,42 @@ def _too_few(cohort: Cohort | None) -> str:
     return f"needs {thresholds.MIN_COHORT} subjects in this source folder; there are {count}"
 
 
+def _sphere_usable(sphere: np.ndarray | None) -> bool:
+    """Every vertex has a direction: no missing coordinates and none at the centre."""
+    return (sphere is not None and bool(np.isfinite(sphere).all())
+            and bool((np.linalg.norm(sphere, axis=1) > 0).all()))
+
+
 def _comparable(surface: HemiSurface, hemi: str, cohort: Cohort) -> bool:
-    return (surface.sphere is not None and surface.thickness is not None
+    return (_sphere_usable(surface.sphere) and surface.thickness is not None
             and surface.cortex is not None and hemi in cohort.median
             and len(surface.sphere) == len(surface.thickness) == len(surface.pial_grid))
 
 
-def _far_above(surface: HemiSurface, median: np.ndarray, spread: np.ndarray) -> np.ndarray:
-    """Cortex vertices much thicker than the cohort is at the nearest common point."""
+def _compared(surface: HemiSurface, median: np.ndarray, spread: np.ndarray) -> tuple[np.ndarray, float]:
+    """Cortex vertices much thicker than the cohort is at the nearest common point, and the
+    share of cortex vertices at which the cohort has values to compare with."""
     at = nearest(target_points(), surface.sphere)
     excess = surface.thickness - median[at]
     usable = np.isfinite(excess) & (spread[at] > 0)
     deviations = np.divide(excess, spread[at], out=np.zeros(len(at)), where=usable)
     in_cortex = np.zeros(len(at), dtype=bool)
     in_cortex[surface.cortex[surface.cortex < len(at)]] = True
-    return (usable & in_cortex & (deviations >= thresholds.COHORT_Z)
-            & (excess >= thresholds.COHORT_MIN_MM))
+    far = (usable & in_cortex & (deviations >= thresholds.COHORT_Z)
+           & (excess >= thresholds.COHORT_MIN_MM))
+    return far, float((usable & in_cortex).sum() / max(in_cortex.sum(), 1))
 
 
-def _hemi_findings(hemi: str, surface: HemiSurface, cohort: Cohort) -> list[Finding]:
-    selected = _far_above(surface, cohort.median[hemi], cohort.spread[hemi])
+def _patches(hemi: str, surface: HemiSurface, selected: np.ndarray) -> list[Finding]:
     return [vertex_finding(NAME, KIND, hemi, surface.pial_grid[group])
             for group in connected_groups(selected, surface.faces)
             if len(group) >= thresholds.MIN_COHORT_VERTICES]
+
+
+def _coverage_note(coverage: dict[str, float]) -> str:
+    """Says where only part of the cortex could be compared, so "ran" is not read as "all of it"."""
+    return "; ".join(f"{hemi}: cohort values at {share:.0%} of cortex vertices"
+                     for hemi, share in coverage.items() if share < FULL_COVERAGE)
 
 
 def cohort_thickness(data: SubjectData) -> IndicatorResult:
@@ -49,10 +64,15 @@ def cohort_thickness(data: SubjectData) -> IndicatorResult:
         return not_run(NAME, KIND, _too_few(cohort))
     if all(surface.sphere is None for surface in data.hemis.values()):
         return not_run(NAME, KIND, "no sphere.reg")
-    usable = {hemi: s for hemi, s in data.hemis.items() if _comparable(s, hemi, cohort)}
-    findings = [f for hemi, s in usable.items() for f in _hemi_findings(hemi, s, cohort)]
-    why = "no matching sphere.reg, thickness and cortex label, or no cohort values"
-    return capped(NAME, KIND, findings, unchecked(data, usable, why))
+    results = {hemi: _compared(s, cohort.median[hemi], cohort.spread[hemi])
+               for hemi, s in data.hemis.items() if _comparable(s, hemi, cohort)}
+    usable = {hemi: data.hemis[hemi] for hemi, (_, share) in results.items() if share > 0}
+    skipped = unchecked(data, usable, WHY_SKIPPED)
+    if not usable:
+        return not_run(NAME, KIND, skipped)
+    findings = [f for hemi, s in usable.items() for f in _patches(hemi, s, results[hemi][0])]
+    notes = [skipped, _coverage_note({hemi: results[hemi][1] for hemi in usable})]
+    return capped(NAME, KIND, findings, "; ".join(note for note in notes if note))
 
 
 COHORT_INDICATORS = (cohort_thickness,)
