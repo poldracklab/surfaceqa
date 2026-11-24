@@ -1,0 +1,15 @@
+{% extends "base.html" %}
+{% block title %}surfaceqa — building{% endblock %}
+{% block main %}
+<h1>Building</h1>
+<p class="path">{{ status.out }}</p>
+<p id="state">{{ status.state }}{% if status.total %}: {{ status.done }} of {{ status.total }}{% endif %}</p>
+<p><progress id="bar" max="1" value="0"></progress></p>
+<ul id="problems"></ul>
+<pre id="log" hidden></pre>
+<form method="post" action="/start/cancel" id="cancel" class="start"{% if status.state != "running" %} hidden{% endif %}><button type="submit">Cancel</button> <span class="note">Subjects that are finished are kept.</span></form>
+<form method="post" action="/start/open" id="open" class="start"{% if status.state == "running" or not status.openable %} hidden{% endif %}><input type="hidden" name="path" value="{{ status.out }}"><button type="submit">Open the project</button></form>
+<p><a href="/start">Start page</a></p>
+<noscript><meta http-equiv="refresh" content="3"><p class="note">Without JavaScript this page reloads every few seconds.</p></noscript>
+<script type="module" src="/static/progress.js"></script>
+{% endblock %}

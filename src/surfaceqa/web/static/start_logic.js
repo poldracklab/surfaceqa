@@ -27,3 +27,44 @@ export function planQuery(sources, out) {
   query.append("out", out);
   return query.toString();
 }
+
+const STAGES = {
+  render: (s) => `Rendering: ${s.done} of ${count(s.total)} done`,
+  cohort: () => "Comparing the subjects with each other",
+  indicators: (s) => `Computing indicators: ${s.done} of ${count(s.total)} done`,
+};
+
+function finished(status) {
+  const failed = (status.problems || []).length;
+  const cohort = status.cohort_failed ? " The comparison across subjects failed." : "";
+  return failed
+    ? `Finished, but ${failed} of ${count(status.total)} could not be built.${cohort}`
+    : `Finished: ${count(status.total)}.${cohort}`;
+}
+
+export function progressText(status) {
+  switch (status.state) {
+    case "running": return STAGES[status.stage] ? STAGES[status.stage](status) : "Starting…";
+    case "done": return finished(status);
+    case "cancelled":
+      return "Cancelled. Subjects that were finished are kept; building the same folder again continues from there.";
+    case "stopped": return "The build stopped before it finished.";
+    default: return "No build is running.";
+  }
+}
+
+// Rendering is most of the work; the comparison is brief; the indicators are the rest.
+export function progressFraction(status) {
+  if (status.state === "done") return 1;
+  const part = status.total ? status.done / status.total : 0;
+  const at = {render: 0.6 * part, cohort: 0.6, indicators: 0.6 + 0.4 * part}[status.stage] ?? 0;
+  return Math.round(at * 1000) / 1000;
+}
+
+export function shouldLeave(status) {
+  return status.state === "done" && !(status.problems || []).length && !status.cohort_failed;
+}
+
+export function pollDelay(status) {
+  return status.state === "running" ? 1000 : null;
+}

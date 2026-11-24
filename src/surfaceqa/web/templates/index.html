@@ -2,6 +2,8 @@
 {% block main %}
 <h1>Subjects</h1>
 <p class="note">Subjects are ordered by suspicion score within each source folder; scores from different pipelines, versions or resolutions are not comparable. The score only orders the work; it does not mean a subject is good or bad. "ready" means the report was rendered, not that the surfaces are good. A subject is reviewed only when a name is listed under "Reviewed by".</p>
+{% if start is not none %}<p class="report"><a href="/start">Other projects</a>{% if start.building %} · A build of this project is running: <a href="/start/progress">progress</a>{% endif %}</p>
+{% if start.can_check and not start.building %}<form method="post" action="/start/check" class="report"><button type="submit" title="Build the project's folders again: new subjects are added, changed ones are redone">Check for new or changed subjects</button></form>{% endif %}{% endif %}
 {% if reviewing %}<p><a href="/next">Next subject to review</a></p>{% endif %}
 {% if report is not none %}<form method="post" action="/report" class="report">How the errors are spread over subjects and regions: {% if report.made %}<a href="/report/index.html">Report</a> <span class="muted">made {{ report.made }}</span> {% endif %}<button type="submit">{{ "Update report" if report.made else "Make report" }}</button></form>{% endif %}
 <table class="subjects">

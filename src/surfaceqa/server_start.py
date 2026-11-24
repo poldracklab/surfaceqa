@@ -16,6 +16,7 @@ from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import HTMLResponse, PlainTextResponse, RedirectResponse
 
 from surfaceqa import jobs, lock, recent, start
+from surfaceqa.settings import sources as recorded_sources
 from surfaceqa.site import render_page, write_site
 
 TOKEN_COOKIE = "surfaceqa_token"
@@ -29,6 +30,7 @@ router = APIRouter()
 class StartMode:
     token: str  # in the address printed at launch; nobody else on the machine knows it
     job: jobs.Job | None = None
+    settled: jobs.Job | None = None  # the last job whose end has been acted on
 
 
 # ---- the guard -------------------------------------------------------------------------------
@@ -155,16 +157,88 @@ def _busy(mode: StartMode, out: Path) -> str | None:
     return None
 
 
+def _begin(mode: StartMode, sources: list[str], out: str):
+    """Start building these folders into `out`, or say why not."""
+    made = start.plan(sources, out)
+    if made["error"]:
+        return _page(made["error"], 400)
+    target = Path(made["out"]).resolve()
+    busy = _busy(mode, target)
+    if busy:
+        return _page(busy, 409)
+    folders = [Path(text).expanduser().resolve() for text in sources if str(text).strip()]
+    mode.job = jobs.start(folders, target, jobs.default_jobs())
+    return RedirectResponse("/start/progress", status_code=303)
+
+
 @router.post("/start/build")
 async def build(request: Request):
     form = await _form(request)
-    made = start.plan(form.get("source", []), _first(form, "out"))
-    if made["error"]:
-        return _page(made["error"], 400)
-    mode, out = request.app.state.start, Path(made["out"]).resolve()
-    busy = _busy(mode, out)
-    if busy:
-        return _page(busy, 409)
-    sources = [Path(text).expanduser().resolve() for text in form["source"] if text.strip()]
-    mode.job = jobs.start(sources, out, jobs.default_jobs())
+    return _begin(request.app.state.start, form.get("source", []), _first(form, "out"))
+
+
+@router.post("/start/check")
+def check(request: Request):
+    """Build the open project's folders again: new subjects are added, changed ones redone."""
+    qa_dir = request.app.state.qa_dir
+    if qa_dir is None:
+        return RedirectResponse("/start", status_code=303)
+    sources = recorded_sources(qa_dir)
+    if not sources:
+        return _page(f"{qa_dir} does not record which folders it was built from. Build them once "
+                     "under “Inspect new data” with this QA directory as the output.", 400)
+    return _begin(request.app.state.start, [str(source) for source in sources], str(qa_dir))
+
+
+@router.post("/start/cancel")
+async def cancel(request: Request):
+    job = request.app.state.start.job
+    if job is None:
+        return RedirectResponse("/start", status_code=303)
+    await run_in_threadpool(jobs.cancel, job)
     return RedirectResponse("/start/progress", status_code=303)
+
+
+# ---- progress --------------------------------------------------------------------------------
+
+def _settle(app: FastAPI, mode: StartMode) -> None:
+    """Once, when a job has ended: remember what it built, and show it unless the researcher
+    has another project open."""
+    job, mode.settled = mode.job, mode.job
+    if not start.is_qa_dir(job.out):
+        return
+    if app.state.qa_dir in (None, job.out):
+        open_project(app, job.out)
+    else:
+        recent.remember(job.out)
+
+
+def _status(app: FastAPI) -> dict:
+    mode = app.state.start
+    if mode.job is None:
+        return {"state": "none"}
+    answer = jobs.status(mode.job)
+    if answer["state"] != "running" and mode.settled is not mode.job:
+        _settle(app, mode)
+    return {**answer, "open": app.state.qa_dir == mode.job.out, "openable": start.is_qa_dir(mode.job.out)}
+
+
+@router.get("/start/status")
+def status(request: Request) -> dict:
+    return _status(request.app)
+
+
+@router.get("/start/progress")
+def progress_page(request: Request):
+    if request.app.state.start.job is None:
+        return RedirectResponse("/start", status_code=303)
+    return HTMLResponse(render_page("progress.html", status=_status(request.app)))
+
+
+def start_info(app: FastAPI) -> dict | None:
+    """What the index page of the open project offers in start mode; None for `serve`."""
+    mode, qa_dir = app.state.start, app.state.qa_dir
+    if mode is None:
+        return None
+    return {"can_check": bool(recorded_sources(qa_dir)),
+            "building": job_running(mode) and mode.job.out == qa_dir}

@@ -14,7 +14,7 @@ from fastapi.staticfiles import StaticFiles
 from surfaceqa.layout import read_json
 from surfaceqa.report import PAGE, REPORT_DIR, TABLES, report_made, write_report
 from surfaceqa.reviews import valid_reviewer
-from surfaceqa.server_start import StartMode, install_start
+from surfaceqa.server_start import StartMode, install_start, start_info
 from surfaceqa.server_reviews import (Refused, current_review, has_submitted, next_subject,
                                       store_review)
 from surfaceqa.site import (View, render_guidance, render_index, render_subject, render_viewer,
@@ -97,7 +97,7 @@ def clear_reviewer():
 def index(request: Request):
     view = _view(request)
     report = None if view.blind else {"made": report_made(_qa_dir(request))}
-    return render_index(subject_records(_qa_dir(request), view), view, report)
+    return render_index(subject_records(_qa_dir(request), view), view, report, start_info(request.app))
 
 
 def _report_allowed(request: Request) -> None:
