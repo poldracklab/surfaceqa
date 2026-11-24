@@ -127,3 +127,65 @@ def test_the_checklist_names_the_comparison():
     record = {"indicator": "cohort_thickness", "kind": "thickness", "size_mm3": None, "n": 60}
     assert finding_text(record) == "thicker than the cohort · 60 vertices"
     assert finding_text({**record, "indicator": "thick_patches"}) == "thick patch · 60 vertices"
+
+
+# ---- the comparison is made place by place, hemisphere by hemisphere ------------------------
+
+def _thick_at_the_top(median=2.5):
+    """Cohort statistics that are 5 mm thick around the top of the left hemisphere only."""
+    from surfaceqa.sphere import target_points
+
+    c = cohort(median=median)
+    c.median["lh"][target_points()[:, 2] > 0.7] = 5.0
+    return c
+
+
+def test_thickness_usual_at_that_place_is_not_a_finding_but_is_one_elsewhere():
+    usual, elsewhere = hemi(), hemi()
+    usual.thickness[top(usual)] = 5.0
+    elsewhere.thickness[elsewhere.pial_grid[:, 2] < 20 - 8.0] = 5.0
+    assert cohort_thickness(data_with(_thick_at_the_top(), lh=usual)).findings == []
+    (f,) = cohort_thickness(data_with(_thick_at_the_top(), lh=elsewhere)).findings
+    assert f.grid[2] <= 12
+
+
+def test_each_hemisphere_is_compared_with_its_own_statistics():
+    left, right = hemi(), hemi()
+    left.thickness[top(left)] = 5.0
+    right.thickness[top(right)] = 5.0
+    (f,) = cohort_thickness(data_with(_thick_at_the_top(), lh=left, rh=right)).findings
+    assert f.hemi == "rh"
+
+
+@pytest.mark.parametrize("spoil", [np.nan, np.inf, 0.0])
+def test_a_registration_sphere_with_a_bad_vertex_leaves_that_hemisphere_out(spoil):
+    bad, good = hemi(), hemi()
+    bad.sphere = bad.sphere.copy()
+    bad.sphere[5] = spoil
+    good.thickness[top(good)] = 5.0
+    result = cohort_thickness(data_with(cohort(), lh=bad, rh=good))
+    assert result.status == "ran" and len(result.findings) == 1
+    assert result.reason.startswith("lh not checked")
+
+
+def test_a_hemisphere_with_no_cohort_values_is_reported_as_not_checked():
+    c = cohort()
+    c.median["lh"][:] = np.nan
+    c.spread["lh"][:] = np.nan
+    h = hemi()
+    h.thickness[top(h)] = 5.0
+    result = cohort_thickness(data_with(c, lh=h, rh=hemi()))
+    assert result.findings == [] and result.reason.startswith("lh not checked")
+    alone = cohort_thickness(data_with(c, lh=h))
+    assert alone.status == "not run" and "no cohort values" in alone.reason
+
+
+def test_partial_cohort_coverage_is_stated():
+    from surfaceqa.sphere import target_points
+
+    c = cohort()
+    c.median["lh"][target_points()[:, 2] < 0] = np.nan  # the lower half has too few subjects
+    result = cohort_thickness(data_with(c, lh=hemi(), rh=hemi()))
+    assert result.status == "ran"
+    assert "lh: cohort values at 5" in result.reason and "% of cortex vertices" in result.reason
+    assert "rh" not in result.reason

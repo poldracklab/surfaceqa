@@ -137,3 +137,42 @@ def test_the_cohort_pass_never_writes_into_the_source(source, tmp_path):
     before = {p: p.stat().st_mtime_ns for p in source.rglob("*")}
     _build(source, tmp_path / "qa", jobs=2)
     assert {p: p.stat().st_mtime_ns for p in source.rglob("*")} == before
+
+
+def test_subjects_deleted_from_the_source_stop_counting(source, tmp_path):
+    import shutil
+
+    qa = tmp_path / "qa"
+    _build(source, qa)
+    for name in ("sub-00", "sub-01"):
+        shutil.rmtree(source / name)
+    statuses = _build(source, qa)
+    assert set(statuses.values()) == {"updated"} and len(statuses) == 4
+    assert load_cohort(qa, "fs").n == 4
+    assert "there are 4" in _cohort_indicator(qa, f"fs__{PLANTED}")["reason"]
+
+
+def test_a_source_folder_with_two_underscores_in_its_name_is_compared(tmp_path):
+    folder = tmp_path / "my__fs"
+    for i in range(6):
+        _add_subject(folder, i, planted=(i == 3))
+    qa = tmp_path / "qa"
+    statuses = _build(folder, qa)
+    assert len(statuses) == 6
+    key = next(k for k in statuses if k.endswith(PLANTED))
+    assert _cohort_indicator(qa, key)["status"] == "ran" and len(_cohort_findings(qa, key)) == 1
+
+
+def test_a_bad_registration_sphere_costs_one_hemisphere_not_the_other_indicators(source, tmp_path):
+    import nibabel as nib
+    import numpy as np
+
+    path = source / "sub-00" / "surf" / "rh.sphere.reg"
+    vertices, faces = nib.freesurfer.read_geometry(path)
+    vertices[3] = np.nan
+    nib.freesurfer.write_geometry(path, vertices, faces)
+    qa = tmp_path / "qa"
+    _build(source, qa)
+    listed = _cohort_indicator(qa, "fs__sub-00")
+    assert listed["status"] == "ran" and listed["reason"].startswith("rh not checked")
+    assert len(_cohort_findings(qa, f"fs__{PLANTED}")) == 1

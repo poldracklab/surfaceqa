@@ -20,10 +20,13 @@ def _flat(value: float) -> np.ndarray:
 
 
 def _add(qa, source, name, maps, run=RUN, stamp="v1"):
-    """A subject folder with a current run that holds the given thickness maps (or none)."""
+    """A built subject (its source folder exists) whose current run holds the given maps (or none)."""
     run_dir = qa / "subjects" / f"{source}__{name}" / "runs" / run
     run_dir.mkdir(parents=True, exist_ok=True)
     (run_dir.parent.parent / "current.json").write_text(json.dumps({"run": run}))
+    origin = qa / "sources" / source / name
+    origin.mkdir(parents=True, exist_ok=True)
+    (run_dir / "meta.json").write_text(json.dumps({"source": source, "path": str(origin), "run": run}))
     if maps is not None:
         save_thickness_map(run_dir, maps, stamp)
     return run_dir
@@ -132,3 +135,38 @@ def test_statistics_lost_from_disk_read_as_off(tmp_path):
     update_cohorts(tmp_path)
     (tmp_path / "cohort" / "fs.npz").write_bytes(b"junk")
     assert load_cohort(tmp_path, "fs").median is None
+
+
+# ---- who belongs to a cohort --------------------------------------------------------------
+
+def test_a_subject_removed_from_its_source_folder_leaves_the_cohort(tmp_path):
+    _cohort(tmp_path, [2.0, 2.1, 2.2, 2.3, 2.4, 9.0])
+    update_cohorts(tmp_path)
+    (tmp_path / "sources" / "fs" / "sub-05").rmdir()
+    assert update_cohorts(tmp_path) == {"fs"}
+    cohort = load_cohort(tmp_path, "fs")
+    assert cohort.n == 5 and np.allclose(cohort.median["lh"], 2.2)
+
+
+@pytest.mark.parametrize("flag", ["missing.json", "error.txt"])
+def test_a_subject_whose_latest_build_did_not_succeed_is_not_a_member(tmp_path, flag):
+    _cohort(tmp_path, [2.0, 2.1, 2.2, 2.3, 2.4, 9.0])
+    (tmp_path / "subjects" / "fs__sub-05" / flag).write_text("{}")
+    update_cohorts(tmp_path)
+    assert load_cohort(tmp_path, "fs").n == 5
+
+
+def test_the_source_is_the_one_recorded_for_the_run_not_a_piece_of_the_key(tmp_path):
+    _cohort(tmp_path, [2.0] * 5, source="my__fs")
+    _cohort(tmp_path, [4.0] * 5, source="my__other")
+    assert update_cohorts(tmp_path) == {"my__fs", "my__other"}
+    assert np.allclose(load_cohort(tmp_path, "my__fs").median["lh"], 2.0)
+    assert np.allclose(load_cohort(tmp_path, "my__other").median["lh"], 4.0)
+    assert load_cohort(tmp_path, "my") is None
+
+
+def test_a_run_without_a_readable_meta_is_not_a_member(tmp_path):
+    _cohort(tmp_path, [2.0] * 6)
+    (tmp_path / "subjects" / "fs__sub-05" / "runs" / RUN / "meta.json").write_text("junk")
+    update_cohorts(tmp_path)
+    assert load_cohort(tmp_path, "fs").n == 5
