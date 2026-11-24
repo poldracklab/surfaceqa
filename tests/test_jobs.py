@@ -119,3 +119,18 @@ def test_the_build_never_writes_into_the_source(many, tmp_path):
     before = sorted(str(p) for p in many.rglob("*"))
     _wait(jobs.start([many], tmp_path / "qa", 2), _finished)
     assert sorted(str(p) for p in many.rglob("*")) == before
+
+
+def test_cancel_removes_files_the_build_was_in_the_middle_of_writing(many, tmp_path):
+    out = tmp_path / "qa"
+    job = jobs.start([many], out, 1)
+    _wait(job, lambda s: s["done"] >= 1 or s["state"] != "running")
+    subject = next((out / "subjects").iterdir())
+    run = next((subject / "runs").iterdir())
+    left = [out / ".settings.json.99.partial", out / "cohort" / ".study.npz.99.partial",
+            subject / ".current.json.99.partial", run / ".meta.json.99.partial"]
+    for path in left:
+        path.parent.mkdir(exist_ok=True)
+        path.write_text("{half")
+    jobs.cancel(job)
+    assert not any(path.exists() for path in left)
