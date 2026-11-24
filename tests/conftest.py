@@ -26,6 +26,14 @@ def synth_sources(tmp_path) -> list[Path]:
 
 
 @pytest.fixture
+def many(tmp_path) -> Path:
+    """A source with enough subjects that a build can be stopped in the middle."""
+    for i in range(12):
+        write_subject(tmp_path / "study", name=f"sub-{i:02d}")
+    return tmp_path / "study"
+
+
+@pytest.fixture
 def qa(synth_sources, tmp_path) -> Path:
     """A built QA directory: two complete subjects and one with a missing surface."""
     from surfaceqa.build import build_all

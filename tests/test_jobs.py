@@ -32,14 +32,6 @@ def _alive(pid):
     return True
 
 
-@pytest.fixture
-def many(tmp_path):
-    """A source with enough subjects that a build can be stopped in the middle."""
-    for i in range(12):
-        write_subject(tmp_path / "study", name=f"sub-{i:02d}")
-    return tmp_path / "study"
-
-
 def test_default_jobs_is_at_least_one():
     assert 1 <= jobs.default_jobs() <= max(1, (os.cpu_count() or 1) // 2)
 

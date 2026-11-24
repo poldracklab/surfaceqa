@@ -685,3 +685,17 @@ def test_a_blind_reviewer_does_not_see_the_edited_flag_before_submitting(qa_revi
 def test_pages_written_to_disk_do_not_offer_the_report_button(qa_reviewed):
     write_site(qa_reviewed)
     assert 'action="/report"' not in (qa_reviewed / "index.html").read_text()
+
+
+def test_index_start_controls_are_only_shown_when_given(qa):
+    from surfaceqa.site import View, render_index, subject_records
+
+    records = subject_records(qa)
+    plain = render_index(records, View(serving=True))
+    assert "/start" not in plain
+    idle = render_index(records, View(serving=True), start={"can_check": True, "building": False})
+    assert 'action="/start/check"' in idle and 'href="/start"' in idle and "is running" not in idle
+    no_record = render_index(records, View(serving=True), start={"can_check": False, "building": False})
+    assert 'action="/start/check"' not in no_record and 'href="/start"' in no_record
+    busy = render_index(records, View(serving=True), start={"can_check": True, "building": True})
+    assert 'action="/start/check"' not in busy and 'href="/start/progress"' in busy

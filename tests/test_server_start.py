@@ -7,8 +7,8 @@ from surfaceqa.server_start import StartMode
 
 TOKEN = "tok-9f3a-launch"
 BASE = "http://127.0.0.1:8765"
-GETS = ["/", "/start", "/start/folders", "/start/plan"]
-POSTS = ["/start/open", "/start/forget", "/start/build"]
+GETS = ["/", "/start", "/start/folders", "/start/plan", "/start/progress", "/start/status"]
+POSTS = ["/start/open", "/start/forget", "/start/build", "/start/cancel", "/start/check"]
 
 
 def _app(qa_dir=None):
@@ -259,3 +259,162 @@ def test_reviewing_works_in_start_mode(qa):
     client = _client(qa)
     assert client.post("/reviewer", **_form(name="ann")).status_code == 303
     assert "ann" in client.get("/").text
+
+
+# ---- building from the page ------------------------------------------------------------------
+
+import time
+
+from surfaceqa.layout import current_run_dir
+
+
+def _status(client, until=lambda s: s["state"] != "running", seconds=120):
+    deadline = time.monotonic() + seconds
+    while time.monotonic() < deadline:
+        status = client.get("/start/status").json()
+        if until(status):
+            return status
+        time.sleep(0.05)
+    raise AssertionError(f"timed out: {status}")
+
+
+def _build(client, sources, out):
+    fields = [("source", str(s)) for s in sources] + [("out", str(out))]
+    from urllib.parse import urlencode
+    return client.post("/start/build", content=urlencode(fields),
+                       headers={"origin": BASE, "content-type": "application/x-www-form-urlencoded"})
+
+
+def _started(client):
+    return _status(client, lambda s: s["done"] >= 1 or s["state"] != "running")
+
+
+def test_without_a_build_there_is_no_progress_to_show():
+    client = _client()
+    assert client.get("/start/status").json() == {"state": "none"}
+    response = client.get("/start/progress")
+    assert response.status_code == 303 and response.headers["location"] == "/start"
+    assert client.post("/start/cancel", **_form()).status_code == 303
+
+
+def test_build_from_the_page_to_the_project(synth_sources, tmp_path):
+    client = _client()
+    response = _build(client, synth_sources, tmp_path / "qa")
+    assert response.status_code == 303 and response.headers["location"] == "/start/progress"
+    page = client.get("/start/progress")
+    assert page.status_code == 200 and "/static/progress.js" in page.text and str(tmp_path / "qa") in page.text
+    status = _status(client)
+    assert status["state"] == "done" and status["total"] == 2 and status["problems"] == []
+    assert status["open"] is True and status["out"] == str(tmp_path / "qa")
+    index = client.get("/").text
+    assert "sub-01" in index and "Check for new or changed subjects" in index and 'href="/start"' in index
+    assert [p["path"] for p in recent.projects()] == [str(tmp_path / "qa")]
+
+
+def test_a_subject_that_fails_is_named_with_one_line(synth_sources, tmp_path):
+    (synth_sources[1] / "sub-01" / "surf" / "lh.white").write_bytes(b"junk")
+    client = _client()
+    _build(client, synth_sources, tmp_path / "qa")
+    (problem,) = _status(client)["problems"]
+    assert problem["key"] == "freesurfer-8.2.0__sub-01" and "\n" not in problem["reason"]
+
+
+def test_a_second_build_is_refused_while_one_runs(many, synth_sources, tmp_path):
+    client = _client()
+    _build(client, [many], tmp_path / "qa")
+    job = client.app.state.start.job
+    response = _build(client, synth_sources, tmp_path / "other")
+    assert response.status_code == 409 and "already running" in response.text
+    assert client.app.state.start.job is job and not (tmp_path / "other").exists()
+    client.post("/start/cancel", **_form())
+
+
+def test_cancel_then_build_again(many, tmp_path):
+    client = _client()
+    _build(client, [many], tmp_path / "qa")
+    assert _started(client)["state"] == "running"
+    response = client.post("/start/cancel", **_form())
+    assert response.status_code == 303 and response.headers["location"] == "/start/progress"
+    assert client.get("/start/status").json()["state"] == "cancelled"
+    assert "Cancelled" in client.get("/start/progress").text or "cancelled" in client.get("/start/progress").text
+    _build(client, [many], tmp_path / "qa")
+    status = _status(client)
+    assert status["state"] == "done" and status["total"] == 12
+
+
+def test_a_cancelled_build_with_finished_subjects_is_remembered(many, tmp_path):
+    client = _client()
+    _build(client, [many], tmp_path / "qa")
+    _started(client)
+    client.post("/start/cancel", **_form())
+    client.get("/start/status")
+    assert [p["path"] for p in recent.projects()] == [str(tmp_path / "qa")]
+
+
+def test_a_build_of_other_data_does_not_take_the_open_project_away(qa, tmp_path_factory):
+    from tests.synth import write_subject
+
+    other = tmp_path_factory.mktemp("other")
+    write_subject(other / "study", name="only-here")
+    client = _client(qa)
+    _build(client, [other / "study"], other / "qa")
+    status = _status(client)
+    assert status["state"] == "done" and status["open"] is False
+    assert "only-here" not in client.get("/").text and "sub-02" in client.get("/").text
+    assert str(other / "qa") in [p["path"] for p in recent.projects()]
+    assert "A build of this project is running" not in client.get("/").text
+
+
+def test_check_builds_the_recorded_sources_again(synth_sources, tmp_path):
+    import nibabel as nib
+
+    client = _client()
+    _build(client, synth_sources, tmp_path / "qa")
+    _status(client)
+    before = current_run_dir(tmp_path / "qa", "fastsurfer__sub-01").name
+    surface = synth_sources[0] / "sub-01" / "surf" / "lh.pial"
+    verts, faces, info = nib.freesurfer.read_geometry(surface, read_metadata=True)
+    nib.freesurfer.write_geometry(surface, verts * 0.9, faces, volume_info=info)
+    from tests.synth import write_subject
+    write_subject(synth_sources[0], name="sub-new")
+    response = client.post("/start/check", **_form())
+    assert response.status_code == 303 and response.headers["location"] == "/start/progress"
+    status = _status(client)
+    assert status["state"] == "done" and status["total"] == 3 and status["open"] is True
+    assert current_run_dir(tmp_path / "qa", "fastsurfer__sub-01").name != before
+    assert "sub-new" in client.get("/").text
+
+
+def test_check_is_not_offered_for_a_project_without_recorded_sources(qa):
+    client = _client(qa)
+    index = client.get("/").text
+    assert "Check for new or changed subjects" not in index and 'href="/start"' in index
+    response = client.post("/start/check", **_form())
+    assert response.status_code == 400 and "does not record" in response.text
+    assert client.app.state.start.job is None
+
+
+def test_check_says_when_a_source_folder_is_gone(synth_sources, tmp_path):
+    import shutil
+
+    client = _client()
+    _build(client, synth_sources, tmp_path / "qa")
+    _status(client)
+    shutil.rmtree(synth_sources[1])
+    response = client.post("/start/check", **_form())
+    assert response.status_code == 400 and "Not a folder" in response.text
+
+
+def test_the_project_can_be_reviewed_while_it_is_being_built_again(many, tmp_path):
+    client = _client()
+    _build(client, [many], tmp_path / "qa")
+    _status(client)
+    client.post("/start/check", **_form())
+    index = client.get("/").text
+    if client.get("/start/status").json()["state"] == "running":
+        assert "A build of this project is running" in index and "/start/progress" in index
+        assert "Check for new or changed subjects" not in index
+    assert client.post("/reviewer", **_form(name="ann")).status_code == 303
+    assert client.get("/subjects/study__sub-00/").status_code == 200
+    _status(client)
+    assert "A build of this project is running" not in client.get("/").text
