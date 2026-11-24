@@ -2,7 +2,6 @@
 
 import hashlib
 import json
-import os
 import warnings
 from dataclasses import dataclass
 from pathlib import Path
@@ -10,7 +9,7 @@ from pathlib import Path
 import numpy as np
 
 from surfaceqa import thresholds
-from surfaceqa.layout import current_run_dir, read_json
+from surfaceqa.layout import current_run_dir, read_json, replace_file, replace_text
 from surfaceqa.pipelines import HEMIS
 from surfaceqa.thickness_map import load_thickness_map, map_signature
 
@@ -91,10 +90,8 @@ def _arrays(members: dict[str, Path]) -> dict[str, np.ndarray]:
 
 
 def _write_statistics(path: Path, members: dict[str, Path]) -> None:
-    partial = path.with_suffix(".partial")
-    with open(partial, "wb") as handle:
-        np.savez_compressed(handle, **_arrays(members))
-    os.replace(partial, path)
+    arrays = _arrays(members)
+    replace_file(path, lambda handle: np.savez_compressed(handle, **arrays), mode="wb")
 
 
 def failed_cohort(source: str) -> Cohort:
@@ -119,7 +116,7 @@ def _update_source(qa_dir: Path, source: str, members: dict[str, Path]) -> bool:
         (folder / f"{source}.npz").unlink(missing_ok=True)
     record = {"version": COHORT_VERSION, "n": len(members), "signature": signature,
               "members": {key: run_dir.name for key, run_dir in members.items()}}
-    (folder / f"{source}.json").write_text(json.dumps(record, indent=1))
+    replace_text(folder / f"{source}.json", json.dumps(record, indent=1))
     return True
 
 

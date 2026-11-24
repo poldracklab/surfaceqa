@@ -1,0 +1,40 @@
+{% extends "base.html" %}
+{% block title %}surfaceqa — start{% endblock %}
+{% block main %}
+<h1>Inspect cortical surfaces</h1>
+{% if error %}<p class="error">{{ error }}</p>{% endif %}
+{% if build %}<p class="note">A build is running: <span class="path">{{ build.out }}</span> — <a href="/start/progress">progress and cancel</a></p>{% endif %}
+<section class="start">
+<h2>Inspect new data</h2>
+<p class="note">Choose a FreeSurfer or FastSurfer subjects folder, or the folder of one subject. Nothing is written into it, and nothing leaves this machine.</p>
+<form method="post" action="/start/build" id="build">
+<ul id="chosen"></ul>
+<p><label>Folder <input name="source" id="source" size="70" autocomplete="off" spellcheck="false"></label> <button type="button" id="add" hidden>Add another folder</button></p>
+<div id="browser" hidden><p id="crumbs"></p><ul id="folders"></ul><p id="browser-note" class="note"></p></div>
+<p><label>QA directory <input name="out" id="out" size="70" autocomplete="off" spellcheck="false" placeholder="chosen for you if left empty"></label><br><span class="note">Where the rendered pages and your reviews are kept.</span></p>
+<p id="plan" class="note"></p>
+<p><button type="submit">Build</button></p>
+</form>
+</section>
+<section class="start">
+<h2>Recent projects</h2>
+{% if projects %}
+<table class="subjects projects">
+<thead><tr><th>QA directory</th><th>Sources</th><th>Subjects</th><th>Last opened</th><th></th></tr></thead>
+<tbody>
+{% for p in projects %}
+<tr><td class="path">{{ p.path }}</td><td>{{ p.sources | join(", ") }}</td>
+<td>{% if p.exists %}{{ p.n_subjects }} subject{{ "" if p.n_subjects == 1 else "s" }}{% else %}<span class="muted">missing</span>{% endif %}</td>
+<td class="muted">{{ p.opened }}</td>
+<td>{% if p.exists %}<form method="post" action="/start/open"><input type="hidden" name="path" value="{{ p.path }}"><button type="submit">Open</button></form> {% endif %}<form method="post" action="/start/forget"><input type="hidden" name="path" value="{{ p.path }}"><button type="submit" title="Take this project off the list; its folder is not touched">Remove from list</button></form></td></tr>
+{% endfor %}
+</tbody>
+</table>
+{% else %}<p class="note">No project has been opened on this machine yet.</p>{% endif %}
+</section>
+<section class="start">
+<h2>Open an existing QA directory</h2>
+<form method="post" action="/start/open"><label>Path <input name="path" size="70" autocomplete="off" spellcheck="false"></label> <button type="submit">Open</button></form>
+</section>
+<script type="module" src="/static/start.js"></script>
+{% endblock %}

@@ -9,7 +9,7 @@ from pathlib import Path
 from surfaceqa.discover import SubjectRef
 from surfaceqa.edits import BFS, BFS_EDIT, FASTSURFER_SEG_EDIT, RECON_ALL_EDIT_FILES, WM, detect_edits, edit_state
 from surfaceqa.invocation import first_run_commands
-from surfaceqa.layout import current_run_dir, file_signature, read_json
+from surfaceqa.layout import current_run_dir, file_signature, read_json, replace_text
 from surfaceqa.pipelines import PipelineInfo
 
 PROVENANCE_VERSION = 3  # raise when what is recorded changes, so it is recorded again
@@ -46,7 +46,7 @@ def write_provenance(ref: SubjectRef, pipeline: PipelineInfo, run_dir: Path) -> 
     record = {"version": PROVENANCE_VERSION, "command": stages[0] if stages else None,
               "stages": stages, "edited": edit_state(evidence), "evidence": evidence,
               "signature": signature}
-    (Path(run_dir) / PROVENANCE_FILE).write_text(json.dumps(record, indent=1))
+    replace_text(Path(run_dir) / PROVENANCE_FILE, json.dumps(record, indent=1))
     return True
 
 

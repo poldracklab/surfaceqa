@@ -246,3 +246,27 @@ def test_meta_records_grid_to_scanner(tmp_path):
     assert to_scanner.shape == (4, 4) and np.allclose(to_scanner[:3, :3], to_tkr[:3, :3])
     # a conformed (LIA) volume: scanner coordinates are surface coordinates moved by c_ras
     assert np.allclose(to_scanner[:3, 3] - to_tkr[:3, 3], [3.0, -2.0, 5.0], atol=1e-4)
+
+
+def _stages(events):
+    return list(dict.fromkeys(stage for stage, _, _ in events))
+
+
+@pytest.mark.parametrize("jobs", [1, 2])
+def test_build_all_reports_progress(synth_sources, tmp_path, jobs):
+    events = []
+    refs = find_subjects(synth_sources)
+    results = build_all(refs, tmp_path / "qa", jobs=jobs, progress=lambda *event: events.append(event))
+    assert [r.status for r in results] == ["built", "built"]
+    assert _stages(events) == ["render", "cohort", "indicators"]
+    assert [e for e in events if e[0] == "render"] == [("render", 0, 2), ("render", 1, 2), ("render", 2, 2)]
+    assert [e for e in events if e[0] == "cohort"] == [("cohort", 0, 1), ("cohort", 1, 1)]
+    assert [e for e in events if e[0] == "indicators"] == [("indicators", 0, 2), ("indicators", 1, 2),
+                                                           ("indicators", 2, 2)]
+
+
+def test_build_all_without_progress_gives_the_same_results(synth_sources, tmp_path):
+    refs = find_subjects(synth_sources)
+    quiet = build_all(refs, tmp_path / "a")
+    told = build_all(refs, tmp_path / "b", progress=lambda *event: None)
+    assert quiet == told

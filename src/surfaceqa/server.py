@@ -14,6 +14,7 @@ from fastapi.staticfiles import StaticFiles
 from surfaceqa.layout import read_json
 from surfaceqa.report import PAGE, REPORT_DIR, TABLES, report_made, write_report
 from surfaceqa.reviews import valid_reviewer
+from surfaceqa.server_start import StartMode, install_start, start_info
 from surfaceqa.server_reviews import (Refused, current_review, has_submitted, next_subject,
                                       store_review)
 from surfaceqa.site import (View, render_guidance, render_index, render_subject, render_viewer,
@@ -96,7 +97,7 @@ def clear_reviewer():
 def index(request: Request):
     view = _view(request)
     report = None if view.blind else {"made": report_made(_qa_dir(request))}
-    return render_index(subject_records(_qa_dir(request), view), view, report)
+    return render_index(subject_records(_qa_dir(request), view), view, report, start_info(request.app))
 
 
 def _report_allowed(request: Request) -> None:
@@ -237,11 +238,16 @@ class RevalidatedFiles(StaticFiles):
         return response
 
 
-def create_app(qa_dir: Path, blind: bool = False) -> FastAPI:
+def create_app(qa_dir: Path | None, blind: bool = False, start: StartMode | None = None) -> FastAPI:
+    """The review server of one QA directory. With `start`, the app runs on the researcher's
+    own machine: it may begin without a QA directory and offers the start page."""
     app = FastAPI(title="surfaceqa", docs_url=None, redoc_url=None, openapi_url=None)
-    app.state.qa_dir = Path(qa_dir)
+    app.state.qa_dir = None if qa_dir is None else Path(qa_dir)
     app.state.blind = blind
+    app.state.start = start
     app.include_router(router)
+    if start is not None:
+        install_start(app)
     # the scripts of this version of the tool, not the copy an earlier build left in the QA directory
     app.mount("/static", RevalidatedFiles(packages=[("surfaceqa", "web/static")]), name="static")
     return app

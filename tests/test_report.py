@@ -187,7 +187,7 @@ def test_the_report_is_replaced_whole_never_half_written(qa_reviewed, monkeypatc
 
     replaced = []
     real = os.replace
-    monkeypatch.setattr("surfaceqa.report.os.replace", lambda a, b: (replaced.append(Path(b).name), real(a, b)))
+    monkeypatch.setattr(os, "replace", lambda a, b: (replaced.append(Path(b).name), real(a, b)))
     write_report(qa_reviewed)
     assert sorted(replaced) == sorted(["index.html", *TABLES])
     assert sorted(p.name for p in (qa_reviewed / REPORT_DIR).iterdir()) == sorted(["index.html", *TABLES])

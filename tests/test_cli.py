@@ -151,3 +151,199 @@ def test_report_command_writes_the_page_and_prints_where(qa, capsys):
 def test_report_refuses_a_folder_that_is_not_a_qa_directory(tmp_path):
     assert main(["report", str(tmp_path)]) == 2
     assert not (tmp_path / "report").exists()
+
+
+def test_build_records_the_sources_as_given(synth_sources, tmp_path):
+    from surfaceqa.settings import sources
+
+    qa = tmp_path / "qa"
+    one_subject = synth_sources[1] / "sub-01"
+    assert main(["build", str(synth_sources[0]), str(one_subject), "--out", str(qa)]) == 0
+    assert sources(qa) == [synth_sources[0].resolve(), one_subject.resolve()]
+
+
+def test_a_later_build_with_a_template_keeps_the_recorded_sources(synth_sources, tmp_path):
+    from surfaceqa.settings import rerun_template, sources
+
+    qa = tmp_path / "qa"
+    main(["build", str(synth_sources[0]), "--out", str(qa)])
+    main(["build", str(synth_sources[1]), "--out", str(qa), "--rerun-template", "ssh box {command}"])
+    assert sources(qa) == [s.resolve() for s in synth_sources]
+    assert rerun_template(qa, "freesurfer-8.2.0") == "ssh box {command}"
+
+
+# ---- surfaceqa with no sub-command: the start page --------------------------------------------
+
+import re
+import socket
+
+import pytest
+
+
+@pytest.fixture
+def launched(monkeypatch):
+    """Run the start command without a real server or browser; records what it would do."""
+    import uvicorn
+
+    from surfaceqa import cli
+
+    seen = {"opened": []}
+    monkeypatch.setattr(uvicorn, "run", lambda app, **kwargs: seen.update(app=app, **kwargs))
+    monkeypatch.setattr(cli, "_open_when_listening", lambda port, address: seen["opened"].append((port, address)))
+    return seen
+
+
+def _free() -> int:
+    with socket.socket() as probe:
+        probe.bind(("127.0.0.1", 0))
+        return probe.getsockname()[1]
+
+
+@pytest.mark.parametrize("argv", [[], ["start"]])
+def test_no_sub_command_starts_the_start_page(launched, capsys, argv):
+    port = _free()
+    assert main([*argv, *(["--port", str(port)] if argv else [])]) == 0
+    assert launched["host"] == "127.0.0.1"
+    app = launched["app"]
+    assert app.state.qa_dir is None and len(app.state.start.token) >= 16
+    printed = capsys.readouterr().out
+    address = re.search(r"http://127\.0\.0\.1:(\d+)/\?token=(\S+)", printed)
+    assert address and int(address.group(1)) == launched["port"] and address.group(2) == app.state.start.token
+    assert launched["opened"] == [(launched["port"], address.group(0))]
+    if argv:
+        assert launched["port"] == port
+
+
+def test_each_launch_has_its_own_token(launched):
+    main(["start", "--port", str(_free())])
+    first = launched["app"].state.start.token
+    main(["start", "--port", str(_free())])
+    assert launched["app"].state.start.token != first
+
+
+@pytest.mark.parametrize("argv", [["--no-browser"], ["start", "--no-browser"]])
+def test_no_browser(launched, argv):
+    assert main(argv) == 0
+    assert launched["opened"] == [] and launched["host"] == "127.0.0.1"
+
+
+def test_a_taken_port_moves_to_the_next_free_one(launched, capsys):
+    with socket.socket() as taken:
+        taken.bind(("127.0.0.1", 0))
+        taken.listen()
+        port = taken.getsockname()[1]
+        assert main(["start", "--port", str(port), "--no-browser"]) == 0
+    assert port < launched["port"] <= port + 20
+    assert f"http://127.0.0.1:{launched['port']}/" in capsys.readouterr().out
+
+
+def test_start_cannot_be_given_a_host(launched):
+    with pytest.raises(SystemExit) as stop:
+        main(["start", "--host", "0.0.0.0"])
+    assert stop.value.code == 2 and "app" not in launched
+
+
+def test_help_lists_start(capsys):
+    with pytest.raises(SystemExit) as stop:
+        main(["--help"])
+    assert stop.value.code == 0 and "start" in capsys.readouterr().out
+
+
+def test_a_build_still_running_is_stopped_when_the_tool_is_closed(monkeypatch):
+    import uvicorn
+
+    from surfaceqa import cli, jobs
+
+    job, cancelled = object(), []
+    monkeypatch.setattr(uvicorn, "run", lambda app, **kwargs: setattr(app.state.start, "job", job))
+    monkeypatch.setattr(jobs, "cancel", cancelled.append)
+    monkeypatch.setattr(cli, "_open_when_listening", lambda port, address: None)
+    assert main(["start", "--port", str(_free())]) == 0
+    assert cancelled == [job]
+
+
+def test_the_browser_is_opened_once_the_port_answers(monkeypatch):
+    import webbrowser
+
+    from surfaceqa import cli
+
+    opened = []
+    monkeypatch.setattr(webbrowser, "open", opened.append)
+    with socket.socket() as server:
+        server.bind(("127.0.0.1", 0))
+        server.listen()
+        cli._open_when_listening(server.getsockname()[1], "http://x/").join(timeout=10)
+    assert opened == ["http://x/"]
+
+
+def test_the_browser_is_not_opened_when_nothing_ever_listens(monkeypatch):
+    import webbrowser
+
+    from surfaceqa import cli
+
+    opened = []
+    monkeypatch.setattr(webbrowser, "open", opened.append)
+    cli._open_when_listening(_free(), "http://x/", wait=0.3).join(timeout=10)
+    assert opened == []
+
+
+# ---- found by review -------------------------------------------------------------------------
+
+def test_build_refuses_an_out_that_contains_a_source(tmp_path, capsys):
+    write_subject(tmp_path / "a" / "subjects")
+    before = sorted(str(p) for p in tmp_path.rglob("*"))
+    assert main(["build", str(tmp_path / "a" / "subjects"), "--out", str(tmp_path / "a")]) == 2
+    assert "contains" in capsys.readouterr().err
+    assert sorted(str(p) for p in tmp_path.rglob("*")) == before
+
+
+def _group_members(pid):
+    import subprocess
+
+    return subprocess.run(["ps", "-o", "pid=", "-g", str(pid)], capture_output=True, text=True).stdout.split()
+
+
+@pytest.mark.parametrize("how", ["SIGTERM", "SIGHUP", "SIGINT"])
+def test_closing_the_tool_stops_its_build(how, many, tmp_path, surfaceqa_home):
+    """The real program: a terminal that is closed or an ssh session that drops must not leave
+    a build running that nobody can see or cancel."""
+    import os
+    import signal
+    import subprocess
+    import sys
+    import time
+
+    import httpx
+
+    port = _free()
+    env = {**os.environ, "PYTHONUNBUFFERED": "1", "SURFACEQA_HOME": str(surfaceqa_home)}
+    tool = subprocess.Popen([sys.executable, "-m", "surfaceqa.cli", "start", "--no-browser", "--port", str(port)],
+                            stdout=subprocess.PIPE, text=True, env=env)
+    try:
+        address = re.search(r"http://\S+", tool.stdout.readline()).group(0)
+        base = f"http://127.0.0.1:{port}"
+        with httpx.Client(base_url=base, follow_redirects=True, timeout=10) as client:
+            for _ in range(100):
+                try:
+                    client.get(address)
+                    break
+                except httpx.ConnectError:
+                    time.sleep(0.1)
+            client.post("/start/build", data={"source": str(many), "out": str(tmp_path / "qa")},
+                        headers={"origin": base})
+            status = {}
+            for _ in range(600):
+                status = client.get("/start/status").json()
+                if status.get("pid") and status.get("done", 0) >= 1 or status["state"] != "running":
+                    break
+                time.sleep(0.05)
+        assert status["state"] == "running", status
+        tool.send_signal(getattr(signal, how))
+        tool.wait(timeout=20)
+        deadline = time.monotonic() + 10
+        while _group_members(status["pid"]) and time.monotonic() < deadline:
+            time.sleep(0.1)
+        assert _group_members(status["pid"]) == []
+    finally:
+        if tool.poll() is None:
+            tool.kill()

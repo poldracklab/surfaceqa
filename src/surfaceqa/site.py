@@ -154,12 +154,20 @@ def _context(view: View, root: str, here: str) -> dict:
             "reviewing": view.serving and view.reviewer is not None}
 
 
-def render_index(records: list[dict], view: View = View(), report: dict | None = None) -> str:
+def render_index(records: list[dict], view: View = View(), report: dict | None = None,
+                 start: dict | None = None) -> str:
     """`report` is given by the review server when the report may be made from this page:
-    {"made": when it was last made, or None}."""
+    {"made": when it was last made, or None}. `start` is given when the tool runs on the
+    researcher's own machine: {"can_check": the sources are known, "building": a build of
+    this project is running}."""
     name = "name.html" if _needs_name(view) else "index.html"
-    return environment().get_template(name).render(subjects=records, report=report,
+    return environment().get_template(name).render(subjects=records, report=report, start=start,
                                                    **_context(view, "", "/"))
+
+
+def render_page(name: str, **fields) -> str:
+    """A page of the tool itself (the start page, build progress), not of a QA directory."""
+    return environment().get_template(name).render(view=View(), root="/", here="/", **fields)
 
 
 def render_subject(record: dict, view: View = View()) -> str:

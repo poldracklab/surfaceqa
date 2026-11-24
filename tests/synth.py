@@ -251,3 +251,11 @@ def write_qa_files(subj: Path, pipeline: str = "fastsurfer", plant: dict | None 
     norm = np.select([np.isin(parcels, (2, 41)), parcels > 0], [110, 70], 0).astype(np.uint8)
     _save_like(img, norm, mri / "norm.mgz")
     _write_surface_measures(subj, plant, sphere_reg)
+
+
+def fake_qa_dir(path: Path, key: str = "study__sub-01") -> Path:
+    """The least that makes a folder a QA directory: one subject record."""
+    folder = Path(path) / "subjects" / key
+    folder.mkdir(parents=True)
+    (folder / "current.json").write_text('{"run": "000000000000"}')
+    return Path(path)

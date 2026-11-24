@@ -5,6 +5,14 @@ import pytest
 from tests.synth import write_subject
 
 
+@pytest.fixture(autouse=True)
+def surfaceqa_home(tmp_path_factory, monkeypatch) -> Path:
+    """No test reads or writes the real list of recent projects."""
+    home = tmp_path_factory.mktemp("surfaceqa_home")
+    monkeypatch.setenv("SURFACEQA_HOME", str(home))
+    return home
+
+
 @pytest.fixture
 def synth_subject(tmp_path) -> Path:
     return write_subject(tmp_path / "fastsurfer")
@@ -15,6 +23,14 @@ def synth_sources(tmp_path) -> list[Path]:
     write_subject(tmp_path / "fastsurfer")
     write_subject(tmp_path / "freesurfer-8.2.0", pipeline="freesurfer")
     return [tmp_path / "fastsurfer", tmp_path / "freesurfer-8.2.0"]
+
+
+@pytest.fixture
+def many(tmp_path) -> Path:
+    """A source with enough subjects that a build can be stopped in the middle."""
+    for i in range(12):
+        write_subject(tmp_path / "study", name=f"sub-{i:02d}")
+    return tmp_path / "study"
 
 
 @pytest.fixture

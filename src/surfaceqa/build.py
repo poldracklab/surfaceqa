@@ -17,7 +17,7 @@ from surfaceqa.contours import SURFACE_ORDER, pack_plane, plane_segments
 from surfaceqa.discover import SubjectRef
 from surfaceqa.fingerprint import surface_fingerprint
 from surfaceqa.geometry import DisplayVolume, load_display_volume, to_grid
-from surfaceqa.layout import current_run_dir, read_json, subject_dir
+from surfaceqa.layout import current_run_dir, read_json, replace_text, subject_dir
 from surfaceqa.pipelines import PipelineInfo, SubjectFiles, detect_pipeline, subject_files
 from surfaceqa.planes import PLANES, Plane
 from surfaceqa.provenance import write_provenance
@@ -40,7 +40,7 @@ class BuildResult:
 
 
 def _write_json(path: Path, payload: dict) -> None:
-    path.write_text(json.dumps(payload, indent=1))
+    replace_text(path, json.dumps(payload, indent=1))
 
 
 def _identity(ref: SubjectRef, pipeline: PipelineInfo) -> dict:
@@ -255,26 +255,46 @@ def _also_affected(qa_dir: Path, changed: set[str], built: list[SubjectRef]) -> 
     return jobs
 
 
-def _each(function, items: list, pool: ProcessPoolExecutor | None) -> list:
-    return [function(item) for item in items] if pool is None else list(pool.map(function, items))
+def _each(function, items: list, pool: ProcessPoolExecutor | None, tell=None) -> list:
+    """Apply function to every item, in order, saying how far it has got after each."""
+    results = []
+    _tell(tell, 0, len(items))
+    for result in (map(function, items) if pool is None else pool.map(function, items)):
+        results.append(result)
+        _tell(tell, len(results), len(items))
+    return results
 
 
-def _build_passes(refs: list[SubjectRef], qa_dir: Path, pool: ProcessPoolExecutor | None) -> list[BuildResult]:
+def _tell(tell, done: int, total: int) -> None:
+    if tell is not None:
+        tell(done, total)
+
+
+def _stage(progress, name: str):
+    return None if progress is None else partial(progress, name)
+
+
+def _build_passes(refs: list[SubjectRef], qa_dir: Path, pool: ProcessPoolExecutor | None,
+                  progress=None) -> list[BuildResult]:
     """Each subject on its own, then the cohort statistics, then the indicators that use them."""
-    prepared = _each(partial(_safe_prepare, qa_dir), refs, pool)
+    prepared = _each(partial(_safe_prepare, qa_dir), refs, pool, _stage(progress, "render"))
+    _tell(_stage(progress, "cohort"), 0, 1)
     changed = _safe_cohorts(qa_dir)
+    _tell(_stage(progress, "cohort"), 1, 1)
     jobs = list(zip(refs, prepared)) + _also_affected(qa_dir, changed or set(), refs)
-    return _each(partial(_safe_indicators, qa_dir, changed is not None), jobs, pool)
+    return _each(partial(_safe_indicators, qa_dir, changed is not None), jobs, pool,
+                 _stage(progress, "indicators"))
 
 
-def build_all(refs: list[SubjectRef], qa_dir: Path, jobs: int = 1) -> list[BuildResult]:
+def build_all(refs: list[SubjectRef], qa_dir: Path, jobs: int = 1, progress=None) -> list[BuildResult]:
     """Build every subject; results come back in the order of refs, followed by any other
-    subjects whose cohort comparison had to be redone."""
+    subjects whose cohort comparison had to be redone. `progress(stage, done, total)` is
+    called as the build advances through "render", "cohort" and "indicators"."""
     qa_dir = Path(qa_dir)
     if jobs <= 1:
-        return _build_passes(refs, qa_dir, None)
+        return _build_passes(refs, qa_dir, None, progress)
     with ProcessPoolExecutor(max_workers=jobs) as pool:
-        return _build_passes(refs, qa_dir, pool)
+        return _build_passes(refs, qa_dir, pool, progress)
 
 
 def load_meta(qa_dir: Path, key: str) -> dict | None:
