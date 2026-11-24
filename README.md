@@ -135,6 +135,17 @@ The recipes are in `src/surfaceqa/recipes.json`.
 A subject that shows signs of manual edits (edit files, edit flags or partial reruns in its
 logs) is marked "edited" on the pages and in the `edited` column of the export tables.
 
+## Thickness compared across subjects
+
+Once a source folder has 30 subjects, `build` also compares each subject's cortical thickness,
+place by place, with the other subjects of that folder (using each subject's `surf/?h.sphere.reg`;
+no fsaverage folder is needed). A patch that is much thicker than in the other subjects is listed
+as a finding, "thicker than the cohort": often a place where the pial surface took in sinus or
+dura. Below 30 subjects the subject page says that this indicator did not run.
+
+Adding or rebuilding a subject changes the comparison for the whole folder, so the next `build`
+recomputes the indicators of that folder's subjects. Slices and contours are not redone.
+
 ## What is in a QA directory
 
 ```
@@ -143,12 +154,13 @@ subjects/<source>__<name>/    one folder per subject, with one folder per run
 ratings/                      the reviews
 final/                        final labels, written by finalize
 export/                       tables, written by export
+cohort/                       thickness statistics per source folder
 settings.json                 rerun templates given to build
 ```
 
 ## Not built yet
 
-Side-by-side comparison of two reconstructions, and thickness outliers across the cohort.
+Side-by-side comparison of two reconstructions.
 
 ## Development
 
