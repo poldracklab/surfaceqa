@@ -125,7 +125,8 @@ Shown at `/` when no project is open. Three parts:
 
 ### Packaging
 
-- Version 0.2.0. A licence file is required before publishing (the user's choice).
+- Version 0.2.0. MIT licence (the user's choice): a `LICENSE` file and the
+  licence field in `pyproject.toml`.
 - A test builds the wheel and checks it contains the templates and static files.
 - README opens with a quick start: `uvx surfaceqa`, and for data on a server:
   `ssh -L 8765:localhost:8765 <server>` then `uvx surfaceqa --no-browser`.
