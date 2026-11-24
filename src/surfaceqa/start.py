@@ -8,11 +8,34 @@ from surfaceqa.settings import sources as recorded_sources
 
 MAX_FOLDERS = 500
 MOUNTS = ("/Volumes", "/mnt", "/media")
-BUILD_FILES = ("build.lock", "build_status.json", "build.log")
+BUILD_FILES = ("build.lock", "build_status.json", "build.log", "settings.json")
+SUBJECT_RECORDS = ("current.json", "missing.json", "error.txt")
+
+
+def as_path(text) -> Path:
+    """What the researcher typed, as a path; `~` is their home folder."""
+    try:
+        return Path(text).expanduser()
+    except RuntimeError:  # the home folder of a user who does not exist
+        return Path(text)
+
+
+def _absolute(path: Path) -> Path:
+    """The full path, so the page shows where a relative one would really go."""
+    return path if str(path).startswith("~") else path.resolve()
+
+
+def _has_record(folder: Path) -> bool:
+    return any((folder / name).is_file() for name in SUBJECT_RECORDS)
 
 
 def is_qa_dir(path: Path) -> bool:
-    return (Path(path) / "subjects").is_dir()
+    """Whether surfaceqa built this folder. A folder that merely has `subjects/` in it is not
+    one: FreeSurfer calls its own data folder that."""
+    try:
+        return any(_has_record(folder) for folder in (Path(path) / "subjects").iterdir())
+    except OSError:
+        return False
 
 
 def _is_dir(path: Path) -> bool:
@@ -53,7 +76,7 @@ def _listing(path: Path, folders: list[dict], error: str | None = None, truncate
 
 def list_folders(path: Path) -> dict:
     """The sub-folders of a folder. File names are never part of the answer."""
-    path = Path(path).expanduser()
+    path = as_path(path)
     if not _is_dir(path):
         return _listing(path, [], "This is not a folder.")
     if not os.access(path, os.R_OK | os.X_OK):
@@ -122,19 +145,32 @@ def _source_problem(sources: list[Path]) -> str | None:
     for source in sources:
         if not _is_dir(Path(source)):
             return f"Not a folder: {source}"
-        if not find_subjects([source]):
-            return f"No subject found in {source} (a subject is a folder containing mri/ and surf/)."
+        problem = _subject_problem([source])
+        if problem:
+            return problem
+    return _subject_problem(sources)
+
+
+def _subject_problem(sources: list[Path]) -> str | None:
     try:
-        find_subjects(sources)
-    except ValueError as error:
+        found = find_subjects(sources)
+    except ValueError as error:  # two folders whose subjects would get the same name
         return str(error)
+    except OSError:
+        return f"{sources[0]} cannot be read."
+    if not found:
+        return f"No subject found in {sources[0]} (a subject is a folder containing mri/ and surf/)."
     return None
 
 
 def _out_problem(sources: list[Path], out: Path) -> str | None:
-    out = Path(out).expanduser().resolve()
-    if _inside(out, [source_root(source) for source in sources]):
+    if str(as_path(out)).startswith("~"):
+        return f"{out}: there is no such home folder."
+    out, roots = as_path(out).resolve(), [source_root(source) for source in sources]
+    if _inside(out, roots):
         return f"{out} is inside a folder being inspected; nothing is written into the input data."
+    if any(out in root.parents for root in roots):
+        return f"{out} contains a folder being inspected; choose a place outside the data."
     if out.exists() and not out.is_dir():
         return f"{out} is not a folder."
     if not _usable(out):
@@ -146,17 +182,17 @@ def _out_problem(sources: list[Path], out: Path) -> str | None:
 
 def check_request(sources: list[Path], out: Path) -> str | None:
     """Why this build cannot be started, or None when it can. Nothing is created."""
-    sources = [Path(source).expanduser() for source in sources]
+    sources = [as_path(source) for source in sources]
     return _source_problem(sources) or _out_problem(sources, out)
 
 
 def plan(sources: list, out: str) -> dict:
     """What a build of these folders would do: where it goes, how many subjects, and why not
     if it cannot be started. An empty `out` means the default place."""
-    sources = [Path(source).expanduser() for source in sources if str(source).strip()]
+    sources = [as_path(source) for source in sources if str(source).strip()]
     problem = _source_problem(sources)
     if problem:
         return {"out": "", "error": problem, "adds": False, "n_subjects": 0}
-    target = Path(out.strip()).expanduser() if out.strip() else default_out(sources)
+    target = _absolute(as_path(out.strip())) if out.strip() else default_out(sources)
     return {"out": str(target), "error": _out_problem(sources, target),
             "adds": adds_to_existing(target), "n_subjects": len(find_subjects(sources))}

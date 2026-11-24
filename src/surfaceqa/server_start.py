@@ -7,7 +7,8 @@ launch token, and (when it changes something) come from the app's own pages.
 
 import re
 import secrets
-from dataclasses import dataclass
+import threading
+from dataclasses import dataclass, field
 from pathlib import Path
 from urllib.parse import parse_qs, urlencode, urlsplit
 
@@ -31,6 +32,7 @@ class StartMode:
     token: str  # in the address printed at launch; nobody else on the machine knows it
     job: jobs.Job | None = None
     settled: jobs.Job | None = None  # the last job whose end has been acted on
+    starting: threading.Lock = field(default_factory=threading.Lock)  # one build is begun at a time
 
 
 # ---- the guard -------------------------------------------------------------------------------
@@ -96,14 +98,20 @@ def _first(form: dict[str, list[str]], name: str) -> str:
     return form.get(name, [""])[0].strip()
 
 
-def _page(error: str | None = None, status_code: int = 200) -> HTMLResponse:
-    page = render_page("start.html", projects=recent.projects(), error=error)
+def _running_build(mode: StartMode) -> dict | None:
+    return {"out": str(mode.job.out)} if job_running(mode) else None
+
+
+def _page(app: FastAPI, error: str | None = None, status_code: int = 200) -> HTMLResponse:
+    _status(app)  # a build that ended while nobody watched is taken note of here
+    page = render_page("start.html", projects=recent.projects(), error=error,
+                       build=_running_build(app.state.start))
     return HTMLResponse(page, status_code=status_code)
 
 
 @router.get("/start", response_class=HTMLResponse)
-def start_page():
-    return _page()
+def start_page(request: Request):
+    return _page(request.app)
 
 
 @router.get("/start/folders")
@@ -133,15 +141,16 @@ def open_project(app: FastAPI, qa_dir: Path) -> None:
 @router.post("/start/open")
 async def open_existing(request: Request):
     text = _first(await _form(request), "path")
-    if not text or not start.is_qa_dir(Path(text).expanduser()):
-        return _page(f"{text or 'An empty path'} is not a QA directory (it has no subjects folder).", 400)
-    await run_in_threadpool(open_project, request.app, Path(text).expanduser().resolve())
+    if not text or not start.is_qa_dir(start.as_path(text)):
+        return _page(request.app, f"{text or 'An empty path'} is not a QA directory: surfaceqa did not "
+                                  "build it. To inspect new data, choose it under “Inspect new data”.", 400)
+    await run_in_threadpool(open_project, request.app, start.as_path(text).resolve())
     return RedirectResponse("/", status_code=303)
 
 
 @router.post("/start/forget")
 async def forget(request: Request):
-    recent.forget(Path(_first(await _form(request), "path")))
+    recent.forget(start.as_path(_first(await _form(request), "path")))
     return RedirectResponse("/start", status_code=303)
 
 
@@ -151,30 +160,32 @@ def job_running(mode: StartMode) -> bool:
 
 def _busy(mode: StartMode, out: Path) -> str | None:
     if job_running(mode):
-        return f"A build is already running ({mode.job.out}). Wait for it or cancel it first."
+        return "A build is already running. Wait for it or cancel it first."
     if lock.building(out):
         return f"{out} is already being built by another program."
     return None
 
 
-def _begin(mode: StartMode, sources: list[str], out: str):
+def _begin(app: FastAPI, sources: list[str], out: str):
     """Start building these folders into `out`, or say why not."""
-    made = start.plan(sources, out)
-    if made["error"]:
-        return _page(made["error"], 400)
-    target = Path(made["out"]).resolve()
-    busy = _busy(mode, target)
-    if busy:
-        return _page(busy, 409)
-    folders = [Path(text).expanduser().resolve() for text in sources if str(text).strip()]
-    mode.job = jobs.start(folders, target, jobs.default_jobs())
+    mode = app.state.start
+    with mode.starting:  # two requests at once must not both find that nothing is running
+        made = start.plan(sources, out)
+        if made["error"]:
+            return _page(app, made["error"], 400)
+        target = Path(made["out"]).resolve()
+        busy = _busy(mode, target)
+        if busy:
+            return _page(app, busy, 409)
+        folders = [start.as_path(text).resolve() for text in sources if str(text).strip()]
+        mode.job = jobs.start(folders, target, jobs.default_jobs())
     return RedirectResponse("/start/progress", status_code=303)
 
 
 @router.post("/start/build")
 async def build(request: Request):
     form = await _form(request)
-    return _begin(request.app.state.start, form.get("source", []), _first(form, "out"))
+    return await run_in_threadpool(_begin, request.app, form.get("source", []), _first(form, "out"))
 
 
 @router.post("/start/check")
@@ -185,9 +196,10 @@ def check(request: Request):
         return RedirectResponse("/start", status_code=303)
     sources = recorded_sources(qa_dir)
     if not sources:
-        return _page(f"{qa_dir} does not record which folders it was built from. Build them once "
-                     "under “Inspect new data” with this QA directory as the output.", 400)
-    return _begin(request.app.state.start, [str(source) for source in sources], str(qa_dir))
+        return _page(request.app, f"{qa_dir} does not record which folders it was built from. Build "
+                                  "them once under “Inspect new data” with this QA directory as the "
+                                  "output.", 400)
+    return _begin(request.app, [str(source) for source in sources], str(qa_dir))
 
 
 @router.post("/start/cancel")
@@ -205,6 +217,7 @@ def _settle(app: FastAPI, mode: StartMode) -> None:
     """Once, when a job has ended: remember what it built, and show it unless the researcher
     has another project open."""
     job, mode.settled = mode.job, mode.job
+    jobs.cleanup(job)  # a build that died by itself may have left workers and a lock
     if not start.is_qa_dir(job.out):
         return
     if app.state.qa_dir in (None, job.out):

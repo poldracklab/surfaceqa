@@ -3,6 +3,7 @@
 {% block main %}
 <h1>Inspect cortical surfaces</h1>
 {% if error %}<p class="error">{{ error }}</p>{% endif %}
+{% if build %}<p class="note">A build is running: <span class="path">{{ build.out }}</span> — <a href="/start/progress">progress and cancel</a></p>{% endif %}
 <section class="start">
 <h2>Inspect new data</h2>
 <p class="note">Choose a FreeSurfer or FastSurfer subjects folder, or the folder of one subject. Nothing is written into it, and nothing leaves this machine.</p>

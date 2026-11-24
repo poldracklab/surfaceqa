@@ -72,21 +72,25 @@ def _kill(job: Job, how: int) -> None:
         pass
 
 
+def cleanup(job: Job) -> None:
+    """Leave nothing of the job behind: no worker, no lock, no half-written file. For a job
+    that was cancelled or that died by itself."""
+    _kill(job, signal.SIGKILL)  # workers outlive a build that is killed
+    job.process.wait()
+    lock.release(job.out)
+    _sweep(job.out)
+
+
 def cancel(job: Job) -> None:
     """Stop the build and its workers at once. What it finished stays."""
-    if job.process.poll() is not None:
-        return
-    job.cancelled = True
-    _kill(job, signal.SIGTERM)
-    try:
-        job.process.wait(timeout=5)
-    except subprocess.TimeoutExpired:
-        pass
-    _kill(job, signal.SIGKILL)  # workers that outlived the build
-    job.process.wait()
-    if not lock.building(job.out):
-        lock.release(job.out)
-    _sweep(job.out)
+    if job.process.poll() is None:
+        job.cancelled = True
+        _kill(job, signal.SIGTERM)
+        try:
+            job.process.wait(timeout=5)
+        except subprocess.TimeoutExpired:
+            pass
+    cleanup(job)
 
 
 def _sweep(out: Path) -> None:

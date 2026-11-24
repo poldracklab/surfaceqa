@@ -61,8 +61,11 @@ export function progressFraction(status) {
   return Math.round(at * 1000) / 1000;
 }
 
+// Only when the tool itself opened the new project: with another project open, the
+// researcher may be in the middle of a review of it.
 export function shouldLeave(status) {
-  return status.state === "done" && !(status.problems || []).length && !status.cohort_failed;
+  return status.state === "done" && status.open === true
+    && !(status.problems || []).length && !status.cohort_failed;
 }
 
 export function pollDelay(status) {

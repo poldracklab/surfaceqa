@@ -2,10 +2,12 @@
 
 import argparse
 import os
+import signal
 import socket
 import sys
 import threading
 import time
+from contextlib import contextmanager
 from pathlib import Path
 
 from surfaceqa import progress
@@ -81,6 +83,8 @@ def _build(args: argparse.Namespace) -> int:
     out = (args.out or roots[0].parent / "surfaceqa").resolve()
     if _inside(out, roots):
         return _fail(f"--out {out} is inside a source folder; nothing is written into the input data")
+    if any(out in root.parents for root in roots):
+        return _fail(f"--out {out} contains a source folder; choose a place outside the input data")
     try:
         refs = find_subjects(sources, args.subjects)
     except ValueError as error:
@@ -110,8 +114,8 @@ def _running(out: Path):
 
 
 def _run_build(args: argparse.Namespace, sources: list[Path], refs: list, out: Path) -> list[BuildResult]:
+    save_sources(out, sources)  # first, so a build that is stopped can be taken up again
     results = build_all(refs, out, jobs=args.jobs, progress=_running(out) if args.progress else None)
-    save_sources(out, sources)
     if args.rerun_template is not None:
         save_rerun_template(out, sorted({ref.source for ref in refs}), args.rerun_template)
     write_site(out)
@@ -236,10 +240,29 @@ def _start(args: argparse.Namespace) -> int:
     print(f"surfaceqa: {address}\nOpen this address in a browser on this machine. Ctrl-C stops surfaceqa.")
     if not args.no_browser:
         _open_when_listening(port, address)
-    uvicorn.run(server.create_app(None, start=mode), host="127.0.0.1", port=port, log_level="warning")
-    if mode.job is not None:
-        jobs.cancel(mode.job)  # a build must not go on unseen after the tool is closed
+    try:
+        with _exit_on(signal.SIGTERM, signal.SIGHUP):
+            uvicorn.run(server.create_app(None, start=mode), host="127.0.0.1", port=port, log_level="warning")
+    finally:
+        if mode.job is not None:
+            jobs.cancel(mode.job)  # a build must not go on unseen after the tool is closed
     return 0
+
+
+def _leave(number: int, frame) -> None:
+    raise SystemExit(128 + number)
+
+
+@contextmanager
+def _exit_on(*signals: int):
+    """Leave in the ordinary way when the terminal is closed or the program is told to end,
+    so that what must be cleared up is cleared up."""
+    before = {number: signal.signal(number, _leave) for number in signals}
+    try:
+        yield
+    finally:
+        for number, handler in before.items():
+            signal.signal(number, handler)
 
 
 COMMANDS = {"build": _build, "serve": _serve, "finalize": _finalize, "export": _export,

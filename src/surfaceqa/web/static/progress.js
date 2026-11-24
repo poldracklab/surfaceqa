@@ -32,7 +32,7 @@ async function poll() {
     return;
   }
   show(status);
-  if (shouldLeave(status) && status.openable) { $("open").submit(); return; }
+  if (shouldLeave(status)) { location.href = "/"; return; }
   const delay = pollDelay(status);
   if (delay !== null) setTimeout(poll, delay);
 }
