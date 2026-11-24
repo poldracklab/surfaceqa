@@ -8,7 +8,47 @@ A person makes every judgment. The automated indicators only order the subjects 
 places to look; a low score does not mean the surfaces are correct, and no indicator result is
 ever recorded as a rating.
 
+## Quick start
+
+```
+uvx surfaceqa
+```
+
+This downloads the tool, starts it on your own machine and opens the start page in your
+browser. Choose a FreeSurfer or FastSurfer subjects folder (or one subject), press Build, and
+review. The only requirement is [uv](https://docs.astral.sh/uv/); FreeSurfer does not need to
+be installed.
+
+- Nothing leaves your machine, and nothing is written into the folder you inspect. The rendered
+  pages and your reviews go into a separate QA directory, by default `surfaceqa/` beside the
+  subjects folder (or `~/surfaceqa/<folder name>` when that place cannot be written). The start
+  page shows the place before you build and lets you change it.
+- The start page lists the projects you opened before, and opens a QA directory someone else
+  built.
+- A build can be cancelled; building the same folder again continues where it stopped. "Check
+  for new or changed subjects" on a project's index page builds its folders again.
+- The address printed at start carries a token. Other users of the same machine cannot use
+  your copy of the tool without it.
+
+Until the package is on PyPI, or to run the latest code:
+
+```
+uvx --from git+https://github.com/poldracklab/surfaceqa surfaceqa
+```
+
+When the data are on a server, run the tool there and look at it from your own machine:
+
+```
+ssh -L 8765:localhost:8765 <server>
+uvx surfaceqa --no-browser        # on the server; open the address it prints on your machine
+```
+
+`surfaceqa --port 9000` uses another port. The rest of this page describes the separate
+commands, which are what a lab uses to run one shared review server for several reviewers.
+
 ## Install
+
+For development, or to use the separate commands from a checkout:
 
 ```
 uv sync
@@ -212,3 +252,14 @@ settings.json                 rerun templates given to build
 ```
 uv run pytest
 ```
+
+## Publishing (maintainer)
+
+```
+uv run pytest
+uv build
+uv publish
+```
+
+`uv build` writes the wheel and the source archive into `dist/`; `uv publish` uploads them to
+PyPI with your own token. The version is in `pyproject.toml`.

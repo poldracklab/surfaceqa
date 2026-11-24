@@ -53,3 +53,33 @@ def test_the_readme_starts_with_the_one_command():
     quick = readme[readme.index("## Quick start"):readme.index("## Install")]
     assert "uvx surfaceqa" in quick and "git+https://github.com/poldracklab/surfaceqa" in quick
     assert "ssh -L 8765:localhost:8765" in quick and "--no-browser" in quick
+
+
+CHECK = """
+import sys
+from pathlib import Path
+import surfaceqa.server, surfaceqa.server_start
+from fastapi.testclient import TestClient
+assert Path(surfaceqa.server.__file__).is_relative_to(sys.argv[1]), surfaceqa.server.__file__
+app = surfaceqa.server.create_app(None, start=surfaceqa.server_start.StartMode("t0ken"))
+client = TestClient(app, base_url="http://127.0.0.1:8765", follow_redirects=False)
+assert client.get("/start?token=t0ken").status_code == 303
+assert "Inspect new data" in client.get("/start").text
+for name in ("start.js", "start_logic.js", "progress.js", "app.css"):
+    assert client.get(f"/static/{name}").status_code == 200, name
+print("ok")
+"""
+
+
+def test_the_unpacked_wheel_serves_the_start_page_by_itself(wheel, tmp_path):
+    """Run from the wheel's files alone, away from the checkout: the pages and scripts it needs
+    must be inside it."""
+    import os
+    import sys
+
+    with zipfile.ZipFile(wheel) as archive:
+        archive.extractall(tmp_path / "site")
+    env = {**os.environ, "PYTHONPATH": str(tmp_path / "site")}
+    ran = subprocess.run([sys.executable, "-c", CHECK, str(tmp_path / "site")], cwd=tmp_path,
+                         env=env, capture_output=True, text=True)
+    assert ran.returncode == 0 and ran.stdout.strip() == "ok", ran.stderr
