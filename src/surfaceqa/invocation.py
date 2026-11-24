@@ -6,6 +6,8 @@ from pathlib import Path
 FASTSURFER_FLAGS = {"seg": ["--edits"], "surf": ["--edits", "--surf_only"]}
 RECON_ALL_STAGES = {"pial": ["-autorecon-pial"], "wm": ["-autorecon2-wm", "-autorecon3"],
                     "cp": ["-autorecon2-cp", "-autorecon3"]}
+REPLACED_FLAGS = ("--edits", "--surf_only", "--seg_only")  # a rerun sets these itself
+STATUS_WORDS = {"finished", "exited"}  # recon-all's own closing lines also start with its name
 FASTSURFER_PLACEHOLDER = "run_fastsurfer.sh <the options of the first run>"
 RECON_ALL_PLACEHOLDER = "<the other options of the first run, such as -T2pial>"
 DROPPED_WITH_VALUE = {"-i", "-T2", "-FLAIR", "-s", "-subjid", "-subject", "-sid"}
@@ -29,7 +31,7 @@ def _fastsurfer_commands(scripts: Path) -> list[str]:
 def _recon_all_call(line: str, following: str) -> str | None:
     """The command when `line` starts one; recon-all 6 put the arguments on the next line."""
     words = line.split()
-    if not words or Path(words[0]).name != "recon-all":
+    if not words or Path(words[0]).name != "recon-all" or STATUS_WORDS & set(words):
         return None
     if len(words) == 1:
         return f"{line.strip()} {following.strip()}" if following.lstrip().startswith("-") else None
@@ -65,7 +67,7 @@ def _words(command: str | None) -> list[str] | None:
 def _fastsurfer_rerun(words: list[str] | None, flags: list[str]) -> str:
     if words is None:
         return " ".join([FASTSURFER_PLACEHOLDER, *flags])
-    kept = [word for word in words if word not in ("--edits", "--surf_only")]
+    kept = [word for word in words if word not in REPLACED_FLAGS]
     return shlex.join(kept + flags)
 
 

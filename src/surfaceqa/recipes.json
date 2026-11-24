@@ -14,7 +14,8 @@
        "paint": "Use the label values of the segmentation (voxel edit, not recon edit).",
        "rerun": "seg",
        "overlay": true,
-       "view": null
+       "view": null,
+       "lut": true
       },
       {
        "text": "If that is not enough, edit mri/brain.finalsurfs.manedit.mgz: mark the voxels that should not be gray matter.",
@@ -36,7 +37,8 @@
        "paint": "Use the label values of the segmentation (voxel edit, not recon edit).",
        "rerun": "seg",
        "overlay": true,
-       "view": null
+       "view": null,
+       "lut": true
       },
       {
        "text": "If that is not enough, edit mri/brain.finalsurfs.manedit.mgz: mark the missed voxels.",
@@ -58,7 +60,8 @@
        "paint": "Use the label values of the segmentation (voxel edit, not recon edit).",
        "rerun": "seg",
        "overlay": true,
-       "view": null
+       "view": null,
+       "lut": true
       },
       {
        "text": "If that is not enough, edit mri/wm.mgz (and, if needed, mri/filled.mgz in the same way): fill the white matter the surface does not reach.",
@@ -80,7 +83,8 @@
        "paint": "Use the label values of the segmentation (voxel edit, not recon edit).",
        "rerun": "seg",
        "overlay": true,
-       "view": null
+       "view": null,
+       "lut": true
       },
       {
        "text": "If that is not enough, edit mri/wm.mgz (and, if needed, mri/filled.mgz in the same way): remove the voxels that are not white matter.",
@@ -115,7 +119,8 @@
        "paint": "Use the label values of the segmentation (voxel edit, not recon edit).",
        "rerun": "seg",
        "overlay": true,
-       "view": null
+       "view": null,
+       "lut": true
       }
      ]
     }
@@ -250,7 +255,7 @@
    ],
    "never_edit_note": "The FreeSurfer tutorials advise against editing these.",
    "cautions": [
-    "Make a copy of the subject folder before editing, and edit only the copy.",
+    "Keep a backup copy of the subject folder before editing. The commands here edit and rerun the subject folder itself.",
     "Edit as little as possible. It is not possible to move a surface directly; an edit changes what the surface is placed from.",
     "If you do not know whether something is an error, leave it alone.",
     "Manual edits can introduce systematic effects. Keep track of which subjects were edited; the export tables record it.",

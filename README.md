@@ -33,7 +33,7 @@ uv run surfaceqa build /data/derivatives/fastsurfer --out /data/qa \
 ```
 Optional. Stores the line that launches the pipeline for these source folders, with `{command}`
 where the pipeline's own command goes. Fix guidance then shows rerun commands that can be pasted
-as they are.
+as they are. Leave `{command}` outside quotes: the command is inserted with its own quoting.
 
 ```
 uv run surfaceqa serve /data/qa

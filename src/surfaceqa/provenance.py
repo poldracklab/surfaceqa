@@ -12,7 +12,7 @@ from surfaceqa.invocation import original_command
 from surfaceqa.layout import current_run_dir, read_json
 from surfaceqa.pipelines import PipelineInfo
 
-PROVENANCE_VERSION = 1  # raise when what is recorded changes, so it is recorded again
+PROVENANCE_VERSION = 2  # raise when what is recorded changes, so it is recorded again
 PROVENANCE_FILE = "provenance.json"
 WATCHED = ("scripts/deep-seg.log", "scripts/recon-surf.log", "scripts/recon-all.log",
            BFS, BFS_EDIT, FASTSURFER_SEG_EDIT, WM, *RECON_ALL_EDIT_FILES)

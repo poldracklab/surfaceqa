@@ -22,14 +22,14 @@ def _copy_command(path: str, step: dict) -> str | None:
     if not step["copy_from"]:
         return None
     folder = path or NO_FOLDER
-    return shlex.join(["cp", f"{folder}/{step['copy_from']}", f"{folder}/{step['edit']}"])
+    return shlex.join(["cp", "-n", f"{folder}/{step['copy_from']}", f"{folder}/{step['edit']}"])
 
 
 def _step(step: dict, path: str, tkr, reruns: dict[str, str]) -> dict:
     shown = step.get("view") or step["edit"]
     return {"text": step["text"], "paint": step["paint"], "edit": step["edit"],
             "copy": _copy_command(path, step),
-            "freeview": freeview_command(path, shown, tkr, step["overlay"]),
+            "freeview": freeview_command(path, shown, tkr, step["overlay"], bool(step.get("lut"))),
             "rerun": {"label": RERUN_LABELS[step["rerun"]], "command": reruns[step["rerun"]]}}
 
 

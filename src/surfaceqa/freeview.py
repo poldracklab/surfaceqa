@@ -6,6 +6,7 @@ import shlex
 T1 = "mri/orig.mgz"
 SURFACE_COLORS = {"lh.white": "blue", "lh.pial": "yellow", "rh.white": "red", "rh.pial": "yellow"}
 OVERLAY = ":colormap=heat:opacity=0.4"
+LABELS = ":colormap=lut:opacity=0.4"  # a segmentation, drawn with its label colours
 NO_FOLDER = "<subject folder>"
 
 
@@ -13,10 +14,11 @@ def _path(subject_path: str, rel: str) -> str:
     return shlex.quote(f"{subject_path or NO_FOLDER}/{rel}")
 
 
-def _volumes(subject_path: str, edit: str | None, overlay: bool) -> list[str]:
+def _volumes(subject_path: str, edit: str | None, overlay: bool, lut: bool) -> list[str]:
     volumes = [_path(subject_path, T1)]
     if edit:
-        volumes.append(_path(subject_path, edit) + (OVERLAY if overlay else ""))
+        style = LABELS if lut else (OVERLAY if overlay else "")
+        volumes.append(_path(subject_path, edit) + style)
     return volumes
 
 
@@ -37,8 +39,9 @@ def _cursor(tkr) -> list[str]:
     return ["-ras", *(f"{value:.2f}" for value in tkr), "tkreg", "-cc"]
 
 
-def freeview_command(subject_path: str, edit: str | None, tkr, overlay: bool = False) -> str:
+def freeview_command(subject_path: str, edit: str | None, tkr, overlay: bool = False,
+                     lut: bool = False) -> str:
     """The T1, the volume to edit and the four surfaces, with the cursor at `tkr` (surface RAS)."""
-    words = ["freeview", "-v", *_volumes(subject_path, edit, overlay), "-f",
+    words = ["freeview", "-v", *_volumes(subject_path, edit, overlay, lut), "-f",
              *_surfaces(subject_path), *_cursor(tkr), "-viewport", "coronal"]
     return " ".join(words)

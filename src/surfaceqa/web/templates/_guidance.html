@@ -17,7 +17,7 @@
 {% for s in p.steps %}
 <li>
 <p>{{ s.text }} <span class="muted">{{ s.paint }}</span></p>
-{% if s["copy"] %}<p class="note">Create the file to edit, unless it already exists:</p>
+{% if s["copy"] %}<p class="note">Create the file to edit (an existing one is kept):</p>
 <div class="command"><pre>{{ s["copy"] }}</pre><button type="button" class="copy">Copy</button></div>{% endif %}
 <p class="note">Open it at the marked place:</p>
 <div class="command"><pre>{{ s.freeview }}</pre><button type="button" class="copy">Copy</button></div>

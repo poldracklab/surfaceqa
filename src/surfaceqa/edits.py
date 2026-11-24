@@ -16,6 +16,7 @@ BFS_EDIT = "mri/brain.finalsurfs.manedit.mgz"
 FASTSURFER_SEG_EDIT = "mri/aparc.DKTatlas+aseg.deep.manedit.mgz"
 RECON_ALL_EDIT_FILES = ("tmp/control.dat", "mri/aseg.manedit.mgz")
 WM = "mri/wm.mgz"
+RERUN_FLAGS = {"-autorecon2-wm", "-autorecon2-cp", "-autorecon-pial", "-autorecon-bfs"}
 ERASED = 1  # recon-all 8 itself writes 255 into wm.mgz, so only erased voxels are evidence
 
 
@@ -71,8 +72,8 @@ def _edits_flag(subject_dir: Path) -> list[str]:
 
 def _partial_reruns(subject_dir: Path) -> list[str]:
     later = all_commands(subject_dir, "freesurfer")[1:]
-    flags = sorted({word for command in later for word in command.split()
-                    if word.startswith("-autorecon")})
+    # only the flags that rerun after an edit; a first run done in stages is not an edit
+    flags = sorted({word for command in later for word in command.split()} & RERUN_FLAGS)
     return [f"scripts/recon-all.log records a later run with {' '.join(flags)}"] if flags else []
 
 
