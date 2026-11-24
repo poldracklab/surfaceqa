@@ -151,3 +151,22 @@ def test_report_command_writes_the_page_and_prints_where(qa, capsys):
 def test_report_refuses_a_folder_that_is_not_a_qa_directory(tmp_path):
     assert main(["report", str(tmp_path)]) == 2
     assert not (tmp_path / "report").exists()
+
+
+def test_build_records_the_sources_as_given(synth_sources, tmp_path):
+    from surfaceqa.settings import sources
+
+    qa = tmp_path / "qa"
+    one_subject = synth_sources[1] / "sub-01"
+    assert main(["build", str(synth_sources[0]), str(one_subject), "--out", str(qa)]) == 0
+    assert sources(qa) == [synth_sources[0].resolve(), one_subject.resolve()]
+
+
+def test_a_later_build_with_a_template_keeps_the_recorded_sources(synth_sources, tmp_path):
+    from surfaceqa.settings import rerun_template, sources
+
+    qa = tmp_path / "qa"
+    main(["build", str(synth_sources[0]), "--out", str(qa)])
+    main(["build", str(synth_sources[1]), "--out", str(qa), "--rerun-template", "ssh box {command}"])
+    assert sources(qa) == [s.resolve() for s in synth_sources]
+    assert rerun_template(qa, "freesurfer-8.2.0") == "ssh box {command}"
