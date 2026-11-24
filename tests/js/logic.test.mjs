@@ -4,6 +4,7 @@ import {
   sliceSegments, gridToScreen, screenToGrid, clampSlice, crosshairs, initialCursor, fit, zoomAt,
   isHideKey, findingVoxelsOnSlice, zoomTo, resizeView, stepIndex, visiblePlanes, contourBounds, fitBox,
   nearestOnContours, marksOnSlice, itemsRemaining, levelForKey, stepItem, screenToGridExact, isTyping,
+  applyAffine, invertAffine, positionMessage, cursorFromMessage,
 } from "../../src/surfaceqa/web/static/logic.js";
 
 const coronal = {axis: 1, h_axis: 0, v_axis: 2, h_flip: true, v_flip: true, width: 32, height: 40, n_slices: 48};
@@ -205,4 +206,59 @@ test("isTyping is true only where keys are text", () => {
   assert.equal(isTyping({tagName: "INPUT", type: "range"}), false);
   assert.equal(isTyping({tagName: "CANVAS"}), false);
   assert.equal(isTyping({tagName: "BUTTON"}), false);
+});
+
+// ---- linking two viewers ------------------------------------------------------------------
+
+// grid index -> mm: 0.8 mm voxels, axes turned and shifted
+const turned = [[0, 0.8, 0, -10], [-0.8, 0, 0, 20], [0, 0, 0.8, 5], [0, 0, 0, 1]];
+const near = (a, b) => a.every((value, i) => Math.abs(value - b[i]) < 1e-9);
+
+test("applyAffine and invertAffine undo each other", () => {
+  assert.ok(near(applyAffine(turned, [10, 20, 30]), [6, 12, 29]));
+  const back = invertAffine(turned);
+  assert.ok(near(applyAffine(back, applyAffine(turned, [10, 20, 30])), [10, 20, 30]));
+  assert.ok(near(applyAffine(invertAffine(back), [1, 2, 3]), applyAffine(turned, [1, 2, 3])));
+});
+
+test("invertAffine of a matrix that cannot be inverted is null", () => {
+  assert.equal(invertAffine([[1, 2, 3, 0], [2, 4, 6, 0], [0, 0, 1, 0], [0, 0, 0, 1]]), null);
+  assert.equal(invertAffine(undefined), null);
+});
+
+const identityTkr = [[1, 0, 0, -16], [0, 1, 0, -24], [0, 0, 1, -20], [0, 0, 0, 1]];
+const one = {grid_to_scanner: [[1, 0, 0, -13], [0, 1, 0, -26], [0, 0, 1, -15], [0, 0, 0, 1]], grid_to_tkr: identityTkr};
+const fine = {grid_to_scanner: turned, grid_to_tkr: [[0.8, 0, 0, -100], [0, 0.8, 0, -100], [0, 0, 0.8, -100], [0, 0, 0, 1]]};
+const old = {grid_to_tkr: identityTkr}; // a run built before the scanner matrix was recorded
+
+test("positionMessage carries the scanner and surface coordinates and the layout", () => {
+  assert.deepEqual(positionMessage([16, 24, 20], one, "coronal"),
+    {type: "surfaceqa:position", scanner: [3, -2, 5], tkr: [0, 0, 0], layout: "coronal"});
+  assert.equal(positionMessage([16, 24, 20], old, "three").scanner, null);
+});
+
+test("a position lands on the voxel at the same scanner point in another grid", () => {
+  const sent = positionMessage([19, 38, 43], one, "three"); // scanner (6, 12, 28)
+  const grid = cursorFromMessage(sent, fine);
+  assert.deepEqual(grid, [10, 20, 29]); // (6, 12, 28.2) is the centre of this voxel; 28 rounds to it
+  assert.ok(near(applyAffine(fine.grid_to_scanner, [10, 20, 28.75]), [6, 12, 28]));
+});
+
+test("without a scanner matrix on either side the surface coordinates are used", () => {
+  const fromOld = positionMessage([20, 30, 25], old, "three"); // tkr (4, 6, 5)
+  assert.deepEqual(cursorFromMessage(fromOld, one), [20, 30, 25]);
+  const fromNew = positionMessage([20, 30, 25], one, "three");
+  assert.deepEqual(cursorFromMessage(fromNew, old), [20, 30, 25]);
+  assert.deepEqual(cursorFromMessage(fromNew, fine), [20, 21, 6]); // both have one: scanner (7, 4, 10)
+});
+
+test("messages that are not positions are ignored", () => {
+  const good = positionMessage([16, 24, 20], one, "three");
+  for (const bad of [null, "text", 5, {}, {type: "other", tkr: [0, 0, 0]},
+    {...good, scanner: null, tkr: [0, "1", 0]}, {...good, scanner: null, tkr: [0, 0]},
+    {...good, scanner: null, tkr: [0, 0, NaN]}, {...good, scanner: null, tkr: null},
+    {...good, scanner: [1, 2, Infinity], tkr: null}]) {
+    assert.equal(cursorFromMessage(bad, one), null);
+  }
+  assert.equal(cursorFromMessage(good, {}), null);
 });
