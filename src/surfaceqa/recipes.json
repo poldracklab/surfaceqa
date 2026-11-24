@@ -1,0 +1,271 @@
+{
+ "version": 1,
+ "pipelines": {
+  "fastsurfer": {
+   "written_for": "2.6",
+   "docs": "https://deep-mi.org/FastSurfer/stable/overview/EDITING.html",
+   "recipes": {
+    "pial_out": {
+     "steps": [
+      {
+       "text": "Correct the segmentation: remove the gray-matter labels from the voxels that are not cortex (dura, sinus, membrane, cerebellum) in the manual-edit copy of the segmentation.",
+       "edit": "mri/aparc.DKTatlas+aseg.deep.manedit.mgz",
+       "copy_from": "mri/aparc.DKTatlas+aseg.deep.mgz",
+       "paint": "Use the label values of the segmentation (voxel edit, not recon edit).",
+       "rerun": "seg",
+       "overlay": true,
+       "view": null,
+       "lut": true
+      },
+      {
+       "text": "If that is not enough, edit mri/brain.finalsurfs.manedit.mgz: mark the voxels that should not be gray matter.",
+       "edit": "mri/brain.finalsurfs.manedit.mgz",
+       "copy_from": null,
+       "paint": "Paint 1 where it should not be gray matter.",
+       "rerun": "surf",
+       "overlay": false,
+       "view": null
+      }
+     ]
+    },
+    "gray_missed": {
+     "steps": [
+      {
+       "text": "Correct the segmentation: label the missed cortex as gray matter in the manual-edit copy of the segmentation.",
+       "edit": "mri/aparc.DKTatlas+aseg.deep.manedit.mgz",
+       "copy_from": "mri/aparc.DKTatlas+aseg.deep.mgz",
+       "paint": "Use the label values of the segmentation (voxel edit, not recon edit).",
+       "rerun": "seg",
+       "overlay": true,
+       "view": null,
+       "lut": true
+      },
+      {
+       "text": "If that is not enough, edit mri/brain.finalsurfs.manedit.mgz: mark the missed voxels.",
+       "edit": "mri/brain.finalsurfs.manedit.mgz",
+       "copy_from": null,
+       "paint": "Paint 255 to include a voxel.",
+       "rerun": "surf",
+       "overlay": false,
+       "view": null
+      }
+     ]
+    },
+    "white_short": {
+     "steps": [
+      {
+       "text": "Correct the segmentation: label the missed white matter as white matter in the manual-edit copy of the segmentation.",
+       "edit": "mri/aparc.DKTatlas+aseg.deep.manedit.mgz",
+       "copy_from": "mri/aparc.DKTatlas+aseg.deep.mgz",
+       "paint": "Use the label values of the segmentation (voxel edit, not recon edit).",
+       "rerun": "seg",
+       "overlay": true,
+       "view": null,
+       "lut": true
+      },
+      {
+       "text": "If that is not enough, edit mri/wm.mgz (and, if needed, mri/filled.mgz in the same way): fill the white matter the surface does not reach.",
+       "edit": "mri/wm.mgz",
+       "copy_from": null,
+       "paint": "Paint 255 to include a voxel in white matter, 1 to exclude it.",
+       "rerun": "surf",
+       "overlay": true,
+       "view": null
+      }
+     ]
+    },
+    "white_past": {
+     "steps": [
+      {
+       "text": "Correct the segmentation: remove the white-matter labels from the voxels that are not white matter in the manual-edit copy of the segmentation.",
+       "edit": "mri/aparc.DKTatlas+aseg.deep.manedit.mgz",
+       "copy_from": "mri/aparc.DKTatlas+aseg.deep.mgz",
+       "paint": "Use the label values of the segmentation (voxel edit, not recon edit).",
+       "rerun": "seg",
+       "overlay": true,
+       "view": null,
+       "lut": true
+      },
+      {
+       "text": "If that is not enough, edit mri/wm.mgz (and, if needed, mri/filled.mgz in the same way): remove the voxels that are not white matter.",
+       "edit": "mri/wm.mgz",
+       "copy_from": null,
+       "paint": "Paint 255 to include a voxel in white matter, 1 to exclude it.",
+       "rerun": "surf",
+       "overlay": true,
+       "view": null
+      }
+     ]
+    },
+    "topology": {
+     "steps": [
+      {
+       "text": "Edit mri/wm.mgz (and, if needed, mri/filled.mgz in the same way) at the defect: fill holes and remove bridges.",
+       "edit": "mri/wm.mgz",
+       "copy_from": null,
+       "paint": "Paint 255 to include a voxel in white matter, 1 to exclude it.",
+       "rerun": "surf",
+       "overlay": true,
+       "view": null
+      }
+     ]
+    },
+    "crossing": {
+     "steps": [
+      {
+       "text": "No dedicated edit is documented for hemispheres that cross. The thing to try is a segmentation edit at this location: correct the labels where the two hemispheres meet in the manual-edit copy of the segmentation.",
+       "edit": "mri/aparc.DKTatlas+aseg.deep.manedit.mgz",
+       "copy_from": "mri/aparc.DKTatlas+aseg.deep.mgz",
+       "paint": "Use the label values of the segmentation (voxel edit, not recon edit).",
+       "rerun": "seg",
+       "overlay": true,
+       "view": null,
+       "lut": true
+      }
+     ]
+    }
+   },
+   "never_edit": [
+    "mri/mask.mgz",
+    "mri/brainmask.mgz",
+    "tmp/control.dat",
+    "seed files",
+    "mri/aseg.presurf.mgz"
+   ],
+   "never_edit_note": "FastSurfer does not support edits of these; the result is undefined.",
+   "cautions": [
+    "Manual edits can introduce systematic effects. Keep track of which subjects were edited; the export tables record it.",
+    "Try the steps in the order given and rerun after each; stop at the first that fixes the surface."
+   ],
+   "rerun_note": "The rerun must use the same container setup (image, mounts, GPU options) and the same --t1 image as the first run; a different image is an error. With --surf_only the segmentation is not redone."
+  },
+  "freesurfer": {
+   "written_for": "8",
+   "docs": "https://surfer.nmr.mgh.harvard.edu/fswiki/FsTutorial/TroubleshootingData",
+   "recipes": {
+    "pial_out": {
+     "steps": [
+      {
+       "text": "Erase the voxels that are not brain (dura, sinus, membrane, cerebellum) in mri/brain.finalsurfs.manedit.mgz. recon-all 8 removes sinus and dura in this same way. (The older tutorials edit mri/brainmask.mgz for this; in version 8 a full rerun can rebuild that file and lose the edit.)",
+       "edit": "mri/brain.finalsurfs.manedit.mgz",
+       "copy_from": null,
+       "paint": "Erase to value 1 (recon edit, shift-click).",
+       "rerun": "pial",
+       "overlay": false,
+       "view": null
+      }
+     ]
+    },
+    "gray_missed": {
+     "steps": [
+      {
+       "text": "If the white surface is also short of the white matter here, fix that first: fill the missing white matter in mri/wm.mgz (see the recipe for a white surface short of white matter).",
+       "edit": "mri/wm.mgz",
+       "copy_from": null,
+       "paint": "Paint 255 to fill (recon edit brush).",
+       "rerun": "wm",
+       "overlay": true,
+       "view": null
+      },
+      {
+       "text": "If mri/brain.finalsurfs.mgz has the value 1 here, the sinus or dura mask removed real cortex: paint it back in mri/brain.finalsurfs.manedit.mgz.",
+       "edit": "mri/brain.finalsurfs.manedit.mgz",
+       "copy_from": null,
+       "paint": "Paint 255 to keep a voxel.",
+       "rerun": "pial",
+       "overlay": false,
+       "view": null
+      }
+     ]
+    },
+    "white_short": {
+     "steps": [
+      {
+       "text": "Fill the white matter the surface does not reach in mri/wm.mgz.",
+       "edit": "mri/wm.mgz",
+       "copy_from": null,
+       "paint": "Paint 255 to fill (recon edit brush).",
+       "rerun": "wm",
+       "overlay": true,
+       "view": null
+      },
+      {
+       "text": "If the white matter here is darker than 110 in mri/brainmask.mgz, the cause is intensity normalization: add control points instead. In freeview: File > New Point Set, name control.dat, type control points; click voxels that are certainly white matter (never in a lesion); save it as tmp/control.dat in the subject folder.",
+       "edit": "tmp/control.dat",
+       "copy_from": null,
+       "paint": "Control points only in definite white matter with a value below 110.",
+       "rerun": "cp",
+       "overlay": false,
+       "view": "mri/brainmask.mgz"
+      }
+     ]
+    },
+    "white_past": {
+     "steps": [
+      {
+       "text": "Erase the voxels that are not white matter in mri/wm.mgz.",
+       "edit": "mri/wm.mgz",
+       "copy_from": null,
+       "paint": "Erase to value 1 (recon edit, shift-click).",
+       "rerun": "wm",
+       "overlay": true,
+       "view": null
+      }
+     ]
+    },
+    "topology": {
+     "steps": [
+      {
+       "text": "Look at surf/lh.orig.nofix or surf/rh.orig.nofix at the defect (load it in freeview with File > Load Surface). Fill holes and erase bridges in mri/wm.mgz; one or two voxels can be enough.",
+       "edit": "mri/wm.mgz",
+       "copy_from": null,
+       "paint": "Paint 255 to fill a hole; erase to 1 to remove a bridge.",
+       "rerun": "wm",
+       "overlay": true,
+       "view": null
+      }
+     ]
+    },
+    "crossing": {
+     "steps": [
+      {
+       "text": "No dedicated edit is documented for hemispheres that cross. If the white surfaces cross, erase the voxels that join the hemispheres in mri/wm.mgz.",
+       "edit": "mri/wm.mgz",
+       "copy_from": null,
+       "paint": "Erase to value 1 (recon edit, shift-click).",
+       "rerun": "wm",
+       "overlay": true,
+       "view": null
+      },
+      {
+       "text": "If only the pial surfaces touch, erase the voxels between them in mri/brain.finalsurfs.manedit.mgz.",
+       "edit": "mri/brain.finalsurfs.manedit.mgz",
+       "copy_from": null,
+       "paint": "Erase to value 1 (recon edit, shift-click).",
+       "rerun": "pial",
+       "overlay": false,
+       "view": null
+      }
+     ]
+    }
+   },
+   "never_edit": [
+    "mri/aseg.mgz and mri/aseg.presurf.mgz (unless absolutely necessary)",
+    "the cerebellum in mri/brainmask.mgz (it changes the segmentation and later registrations)"
+   ],
+   "never_edit_note": "The FreeSurfer tutorials advise against editing these.",
+   "cautions": [
+    "Keep a backup copy of the subject folder before editing. The commands here edit and rerun the subject folder itself.",
+    "Edit as little as possible. It is not possible to move a surface directly; an edit changes what the surface is placed from.",
+    "If you do not know whether something is an error, leave it alone.",
+    "Manual edits can introduce systematic effects. Keep track of which subjects were edited; the export tables record it.",
+    "The FreeSurfer editing tutorials were written before version 8. These recipes follow them where the version 8 recon-all script still behaves the same way."
+   ],
+   "rerun_note": "Run the rerun with the same SUBJECTS_DIR and the same FreeSurfer version as the first run."
+  }
+ },
+ "region_notes": {
+  "inferior_temporal": "Kendrick Kay's note: signal dropout near the ear canal is often not worth fixing.",
+  "medial_temporal": "Kendrick Kay's note: the surfaces around the hippocampus are often not worth fixing."
+ }
+}

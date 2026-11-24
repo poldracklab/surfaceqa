@@ -41,6 +41,9 @@
 </aside>
 </div>
 {% include "_final.html" %}
+<section id="guidance" class="reviews guidance">
+{% include "_guidance.html" %}
+</section>
 {% if reviewing %}
 <div id="help" class="help" hidden><h2>Keys</h2><dl>
 <dt>1 2 3</dt><dd>rate the current item</dd>
@@ -58,5 +61,6 @@
 {% endif %}
 <script type="module" src="{{ root }}static/viewer.js"></script>
 <script type="module" src="{{ root }}static/checklist.js"></script>
+<script type="module" src="{{ root }}static/guidance.js"></script>
 {% if reviewing %}<script type="module" src="{{ root }}static/review.js"></script>{% endif %}
 {% endblock %}

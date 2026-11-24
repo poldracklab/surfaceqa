@@ -18,6 +18,7 @@ from surfaceqa.qa import load_findings
 from surfaceqa.queue import blind_order
 from surfaceqa.regions import REGIONS
 from surfaceqa.scoring import rank_within_pipeline
+from surfaceqa.site_guidance import guidance_fields
 from surfaceqa.site_reviews import review_fields
 
 VIEW_ORDER = ("coronal", "sagittal", "axial")
@@ -62,7 +63,8 @@ def _status(meta: dict | None, missing: dict | None, failed: bool) -> str:
 
 def _subject_record(qa_dir: Path, folder: Path, view: View) -> dict:
     record = _build_record(qa_dir, folder)
-    return {**record, **review_fields(qa_dir, record, view)}
+    reviews = review_fields(qa_dir, record, view)
+    return {**record, **reviews, **guidance_fields(qa_dir, record, view, reviews)}
 
 
 def _build_record(qa_dir: Path, folder: Path) -> dict:
@@ -159,6 +161,13 @@ def render_subject(record: dict, view: View = View()) -> str:
     here = f"/subjects/{quote(record['key'])}/"
     template = _environment().get_template("name.html" if _needs_name(view) else name)
     return template.render(subject=record, views=VIEW_ORDER, **_context(view, "../../", here))
+
+
+def render_guidance(record: dict, view: View = View()) -> str:
+    """The fix guidance of one subject on its own, for the page to reload after a save."""
+    here = f"/subjects/{quote(record['key'])}/"
+    template = _environment().get_template("_guidance.html")
+    return template.render(subject=record, **_context(view, "../../", here))
 
 
 def _copy_static(qa_dir: Path) -> None:

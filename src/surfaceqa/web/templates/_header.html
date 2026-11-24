@@ -4,4 +4,5 @@
 <dt>Pipeline</dt><dd>{{ subject.pipeline_label }}</dd>
 <dt>Path</dt><dd class="path">{{ subject.path }}</dd>
 <dt>Review</dt><dd>{{ subject.review_label | default('Not yet reviewed') }}</dd>
+{% if subject.edited %}<dt>Edited</dt><dd>yes: {{ subject.evidence | join("; ") }}</dd>{% endif %}
 </dl>

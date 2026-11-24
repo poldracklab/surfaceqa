@@ -95,13 +95,36 @@ def _volume_info(shape, voxel, affine: np.ndarray, cras) -> dict:
     }
 
 
-def _write_logs(subj: Path, pipeline: str, omit) -> None:
+DEFAULT = object()  # write the pipeline's usual command line into the log
+FASTSURFER_COMMAND = ("/fastsurfer/run_fastsurfer.sh --fs_license /fastsurfer/my_mri_data/license.txt "
+                      "--t1 /fastsurfer/my_mri_data/anat_avg/sub-01_T1w_avg.nii.gz --sid sub-01 "
+                      "--sd /outputs --3T --threads 8")
+FREESURFER_COMMAND = ("/usr/local/freesurfer/8.2.0/bin/recon-all -subjid sub-01 -i a.nii.gz -i b.nii.gz "
+                      "-T2 t2.mgz -T2pial -3T -all -parallel -openmp 8")
+DEFAULT_COMMAND = {"fastsurfer": FASTSURFER_COMMAND, "freesurfer": FREESURFER_COMMAND}
+
+
+def fastsurfer_log(command: str | None) -> str:
+    call = f"Invocation: {command}\n" if command else ""
+    return f"Start of the log\nVersion: 2.6.1+a314cd4f\n{call}Reading the image\n"
+
+
+def recon_all_log(command: str | None) -> str:
+    """One invocation as recon-all writes it: date, cd, setenv, the command, then the run."""
+    call = f"{command}\n" if command else ""
+    return ("Wed Sep 16 09:33:45 PDT 2026\n/data/freesurfer/sub-01\n"
+            f"setenv SUBJECTS_DIR /data/freesurfer\n{call}subjid sub-01\n"
+            "recon-all finished without error\n")
+
+
+def _write_logs(subj: Path, pipeline: str, omit, command) -> None:
+    command = DEFAULT_COMMAND.get(pipeline) if command is DEFAULT else command
     files = {"scripts/build-stamp.txt": FASTSURFER_STAMP}
     if pipeline == "fastsurfer":
-        files["scripts/deep-seg.log"] = "Start of the log\nVersion: 2.6.1+a314cd4f\n"
+        files["scripts/deep-seg.log"] = fastsurfer_log(command)
     else:
         files = {"scripts/build-stamp.txt": FREESURFER_STAMP,
-                 "scripts/recon-all.log": "recon-all finished without error\n"}
+                 "scripts/recon-all.log": recon_all_log(command)}
     for rel, text in files.items():
         if rel not in omit:
             (subj / rel).write_text(text)
@@ -110,7 +133,7 @@ def _write_logs(subj: Path, pipeline: str, omit) -> None:
 def write_subject(root: Path, name: str = "sub-01", pipeline: str = "fastsurfer",
                   shape=(32, 40, 48), voxel=1.0, orientation: str = "LIA",
                   cras=(0.0, 0.0, 0.0), omit: tuple[str, ...] = (),
-                  centre=(0.0, 0.0, 0.0)) -> Path:
+                  centre=(0.0, 0.0, 0.0), command=DEFAULT) -> Path:
     """`voxel` is one size or three (file axis order); `centre` is the ball's tkr RAS position."""
     subj = Path(root) / name
     for sub in ("mri", "surf", "scripts"):
@@ -124,7 +147,7 @@ def write_subject(root: Path, name: str = "sub-01", pipeline: str = "fastsurfer"
             verts, faces = icosphere(radius)
             verts = verts + np.asarray(centre)
             nib.freesurfer.write_geometry(subj / "surf" / surf, verts, faces, volume_info=info)
-    _write_logs(subj, pipeline, omit)
+    _write_logs(subj, pipeline, omit, command)
     return subj
 
 

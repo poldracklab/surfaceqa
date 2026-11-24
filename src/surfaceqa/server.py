@@ -14,7 +14,7 @@ from fastapi.staticfiles import StaticFiles
 from surfaceqa.reviews import valid_reviewer
 from surfaceqa.server_reviews import (Refused, current_review, has_submitted, next_subject,
                                       store_review)
-from surfaceqa.site import View, render_index, render_subject, subject_records
+from surfaceqa.site import View, render_guidance, render_index, render_subject, subject_records
 
 COOKIE = "surfaceqa_reviewer"
 ONE_YEAR = 365 * 24 * 3600
@@ -99,6 +99,15 @@ def index(request: Request):
 @router.get("/subjects/{key}/index.html", response_class=HTMLResponse)
 def subject(request: Request, key: str):
     return render_subject(_record(request, key), _view(request))
+
+
+@router.get("/subjects/{key}/guidance", response_class=HTMLResponse)
+def guidance(request: Request, key: str):
+    """The fix guidance of one subject as the current viewer may see it."""
+    view = _view(request)
+    if view.blind and view.reviewer is None:
+        raise HTTPException(404)
+    return render_guidance(_record(request, key), view)
 
 
 @router.get("/next")

@@ -30,7 +30,7 @@ def test_export_to_another_folder(qa_reviewed, tmp_path):
 def test_ratings_table_has_one_row_per_submitted_review_and_item(qa_reviewed):
     export_tables(qa_reviewed)
     rows = _table(qa_reviewed, "ratings")
-    assert list(rows[0]) == ["key", "source", "subject", "pipeline", "version", "run", "current_run",
+    assert list(rows[0]) == ["key", "source", "subject", "pipeline", "version", "edited", "run", "current_run",
                              "reviewer", "protocol", "submitted", "revised", "item", "rating", "note"]
     assert len(rows) == 24 and {r["reviewer"] for r in rows} == {"ann", "bob"}
     assert {r["key"] for r in rows} == {FIRST}  # ann's draft of sub-02 is not exported
@@ -72,7 +72,7 @@ def test_notes_with_tabs_and_newlines_stay_on_one_row(qa_reviewed):
 def test_marks_table_has_one_row_per_mark_with_coordinates(qa_reviewed):
     export_tables(qa_reviewed)
     rows = _table(qa_reviewed, "marks")
-    assert list(rows[0]) == ["key", "run", "current_run", "reviewer", "region", "kind", "surface",
+    assert list(rows[0]) == ["key", "edited", "run", "current_run", "reviewer", "region", "kind", "surface",
                              "vertex", "grid_x", "grid_y", "grid_z", "tkr_x", "tkr_y", "tkr_z",
                              "finding", "note"]
     assert len(rows) == 1
@@ -89,7 +89,7 @@ def test_final_table_is_written_after_finalize_and_marks_stale_finals(qa_reviewe
     finalize(qa_reviewed)
     export_tables(qa_reviewed)
     rows = _table(qa_reviewed, "final")
-    assert list(rows[0]) == ["key", "run", "status", "reviewers", "item", "final", "disagree"]
+    assert list(rows[0]) == ["key", "edited", "run", "status", "reviewers", "item", "final", "disagree"]
     first = {r["item"]: r for r in rows if r["key"] == FIRST}
     assert len(first) == 13 and first["sinus"]["final"] == "minor" and first["overall"]["final"] == "C+"
     assert first["sinus"]["status"] == "agreed" and first["sinus"]["reviewers"] == "ann,bob"
@@ -104,7 +104,7 @@ def test_final_table_is_written_after_finalize_and_marks_stale_finals(qa_reviewe
 def test_indicator_table_has_a_row_per_indicator_and_the_score(qa_reviewed):
     export_tables(qa_reviewed)
     rows = _table(qa_reviewed, "indicators")
-    assert list(rows[0]) == ["key", "source", "subject", "pipeline", "version", "run", "score",
+    assert list(rows[0]) == ["key", "source", "subject", "pipeline", "version", "edited", "run", "score",
                              "indicator", "status", "n_findings", "reason"]
     first = [r for r in rows if r["key"] == FIRST]
     assert len(first) == 9 and float(first[0]["score"]) > 0
@@ -144,7 +144,24 @@ def test_notes_with_quotes_are_read_back_by_a_standard_reader(qa_reviewed):
     submit_review(qa_reviewed, review)
     export_tables(qa_reviewed)
     rows = _table(qa_reviewed, "ratings")
-    assert len(rows) == 36 and all(len(r) == 14 and None not in r for r in rows)
+    assert len(rows) == 36 and all(len(r) == 15 and None not in r for r in rows)
     cat = {r["item"]: r for r in rows if r["reviewer"] == "cat"}
     assert cat["overall"]["note"] == '"starts with a quote, has "more" inside'
     assert cat["sinus"]["note"] == 'ends with a quote"'
+
+
+def test_every_table_says_whether_the_subject_was_edited(qa_reviewed, tmp_path):
+    from surfaceqa.build import build_all
+    from surfaceqa.discover import find_subjects
+    from surfaceqa.finalize import finalize
+
+    source = tmp_path / "fastsurfer"
+    (source / "sub-01" / "mri" / "aparc.DKTatlas+aseg.deep.manedit.mgz").write_bytes(b"x")
+    build_all(find_subjects([source]), qa_reviewed)
+    finalize(qa_reviewed)
+    export_tables(qa_reviewed)
+    for name in ("ratings", "marks", "final", "indicators"):
+        rows = _table(qa_reviewed, name)
+        edited = {row["key"]: row["edited"] for row in rows}
+        assert edited["fastsurfer__sub-01"] == "yes", name
+        assert all(value == "no" for key, value in edited.items() if key != "fastsurfer__sub-01"), name

@@ -8,12 +8,12 @@ from surfaceqa.protocol import item_ids
 from surfaceqa.review_store import all_reviews, list_reviews
 from surfaceqa.site import subject_records
 
-SUBJECT = ["key", "source", "subject", "pipeline", "version", "run"]
+SUBJECT = ["key", "source", "subject", "pipeline", "version", "edited", "run"]
 RATINGS = [*SUBJECT, "current_run", "reviewer", "protocol", "submitted", "revised", "item",
            "rating", "note"]
-MARKS = ["key", "run", "current_run", "reviewer", "region", "kind", "surface", "vertex",
+MARKS = ["key", "edited", "run", "current_run", "reviewer", "region", "kind", "surface", "vertex",
          "grid_x", "grid_y", "grid_z", "tkr_x", "tkr_y", "tkr_z", "finding", "note"]
-FINAL = ["key", "run", "status", "reviewers", "item", "final", "disagree"]
+FINAL = ["key", "edited", "run", "status", "reviewers", "item", "final", "disagree"]
 INDICATORS = [*SUBJECT, "score", "indicator", "status", "n_findings", "reason"]
 
 
@@ -38,7 +38,8 @@ def _write(path: Path, header: list[str], rows: list[dict]) -> Path:
 
 def _subject_columns(record: dict) -> dict:
     return {"key": record["key"], "source": record["source"], "subject": record["name"],
-            "pipeline": record["pipeline"], "version": record["version"]}
+            "pipeline": record["pipeline"], "version": record["version"],
+            "edited": _yes(record["edited"])}
 
 
 def _submitted(qa_dir: Path, record: dict) -> list[dict]:
@@ -59,7 +60,8 @@ def _review_rows(record: dict, review: dict) -> list[dict]:
 
 
 def _mark_rows(record: dict, review: dict) -> list[dict]:
-    head = {"key": record["key"], "run": review["run"], "reviewer": review["reviewer"],
+    head = {"key": record["key"], "edited": _yes(record["edited"]), "run": review["run"],
+            "reviewer": review["reviewer"],
             "current_run": _yes(review["run"] == record.get("run"))}
     rows = []
     for mark in review["marks"]:
@@ -75,7 +77,7 @@ def _final_rows(qa_dir: Path, record: dict) -> list[dict]:
         return []
     run = record.get("run")
     stale = run is None or is_stale(final, list_reviews(qa_dir, record["key"], run), run)
-    head = {"key": final["key"], "run": final["run"], "status": "stale" if stale else final["status"],
+    head = {"key": final["key"], "edited": _yes(record["edited"]), "run": final["run"], "status": "stale" if stale else final["status"],
             "reviewers": ",".join(final["reviewers"])}
     rows = [{**head, "item": item, "final": entry["final"], "disagree": _yes(entry["disagree"])}
             for item, entry in final["items"].items()]
