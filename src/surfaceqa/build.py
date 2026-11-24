@@ -25,7 +25,7 @@ from surfaceqa.qa import write_findings
 from surfaceqa.slices import intensity_window, write_plane_slices
 from surfaceqa.subjectdata import input_signature, load_subject_data
 
-BUILD_FORMAT = 3  # raise when the contents of a run folder change, so old runs are re-rendered
+BUILD_FORMAT = 4  # raise when the contents of a run folder change, so old runs are re-rendered
 COLORS = {"lh.pial": "#ffe100", "rh.pial": "#ffe100", "lh.white": "#2b6cff", "rh.white": "#ff3b30"}
 
 
@@ -94,6 +94,7 @@ def _run_meta(ref, pipeline, run: str, volume: DisplayVolume, window) -> dict:
         "built": datetime.now(timezone.utc).isoformat(timespec="seconds"),
         "shape": shape, "voxel_sizes": list(volume.voxel_sizes), "window": list(window),
         "grid_to_tkr": np.linalg.inv(volume.tkr_to_grid).tolist(),
+        "grid_to_scanner": volume.grid_to_scanner.tolist(),
         "planes": {name: _plane_meta(plane, shape) for name, plane in PLANES.items()},
         "surfaces": {name: {"color": COLORS[name]} for name in SURFACE_ORDER},
     }
