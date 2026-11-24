@@ -117,7 +117,7 @@ def test_cancel_removes_files_the_build_was_in_the_middle_of_writing(many, tmp_p
     out = tmp_path / "qa"
     job = jobs.start([many], out, 1)
     _wait(job, lambda s: s["done"] >= 1 or s["state"] != "running")
-    subject = next((out / "subjects").iterdir())
+    subject = out / "subjects" / "study__sub-00"  # the one that is finished
     run = next((subject / "runs").iterdir())
     left = [out / ".settings.json.99.partial", out / "cohort" / ".study.npz.99.partial",
             subject / ".current.json.99.partial", run / ".meta.json.99.partial"]

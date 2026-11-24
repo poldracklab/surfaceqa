@@ -68,8 +68,8 @@ def status(job: Job) -> dict:
 def _kill(job: Job, how: int) -> None:
     try:
         os.killpg(job.process.pid, how)
-    except ProcessLookupError:
-        pass
+    except (ProcessLookupError, PermissionError):  # gone; macOS says "not permitted" for a
+        pass                                         # group whose processes have all ended
 
 
 def cleanup(job: Job) -> None:

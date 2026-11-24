@@ -10,7 +10,7 @@ from surfaceqa.findings import Finding
 from surfaceqa.indicators_cohort import COHORT_INDICATORS
 from surfaceqa.indicators_surface import SURFACE_INDICATORS
 from surfaceqa.indicators_volume import VOLUME_INDICATORS, IndicatorResult
-from surfaceqa.layout import current_run_dir, read_json
+from surfaceqa.layout import current_run_dir, read_json, replace_text
 from surfaceqa.regions import assign_region, build_context, default_locations
 from surfaceqa import scoring
 from surfaceqa.scoring import finding_points, suspicion_score
@@ -82,7 +82,7 @@ def write_findings(data: SubjectData, run_dir: Path, inputs: dict | None = None)
            "scoring": scoring.as_dict(), "region_note": region_note, "indicators": [_indicator_record(r) for r in results],
            "findings": records, "defaults": default_locations(data)}
     (Path(run_dir) / VOXELS_FILE).write_bytes(blob)
-    (Path(run_dir) / FINDINGS_FILE).write_text(json.dumps(out, indent=1))
+    replace_text(Path(run_dir) / FINDINGS_FILE, json.dumps(out, indent=1))
     return out
 
 
