@@ -49,15 +49,17 @@ def _maps(subject_dir: Path) -> dict[str, np.ndarray]:
     return maps
 
 
-def _stored_signature(path: Path) -> str | None:
+def map_signature(run_dir: Path) -> str | None:
+    """What the run's map was made from, or None when it has no readable map."""
     try:
-        with np.load(path) as stored:
+        with np.load(Path(run_dir) / MAP_FILE) as stored:
             return str(stored["signature"])
     except Exception:
         return None
 
 
-def _save(path: Path, maps: dict[str, np.ndarray], signature: str) -> None:
+def save_thickness_map(run_dir: Path, maps: dict[str, np.ndarray], signature: str) -> None:
+    path = Path(run_dir) / MAP_FILE
     partial = path.with_suffix(".partial")
     with open(partial, "wb") as handle:
         np.savez_compressed(handle, signature=np.array(signature), **maps)
@@ -68,11 +70,11 @@ def write_thickness_map(subject_dir: Path, run_dir: Path) -> bool:
     """Make the map unless it is up to date; True when the file was written or removed."""
     path = Path(run_dir) / MAP_FILE
     signature = _signature(Path(subject_dir))
-    if _stored_signature(path) == signature:
+    if map_signature(run_dir) == signature:
         return False
     maps = _maps(Path(subject_dir))
     if maps:
-        _save(path, maps, signature)
+        save_thickness_map(run_dir, maps, signature)
         return True
     existed = path.exists()
     path.unlink(missing_ok=True)

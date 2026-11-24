@@ -13,6 +13,10 @@ MIN_DEFECT_VERTICES = 100  # small topology defects are fixed automatically and 
 MAX_FINDINGS_PER_INDICATOR = 50  # keeps the page usable; the cap is reported
 NEAR_MM = 4.0  # "next to" the cerebellum or hippocampus, for region assignment
 MEDIAL_MM = 6.0  # "medial": within this distance of the other hemisphere
+MIN_COHORT = 30  # subjects of one source folder needed before they are compared with each other
+COHORT_Z = 4.0  # thicker than the cohort median by this many robust standard deviations ...
+COHORT_MIN_MM = 1.0  # ... and by at least this much, where the cohort hardly varies
+MIN_COHORT_VERTICES = 50  # a patch, not isolated vertices
 
 
 def as_dict() -> dict:
