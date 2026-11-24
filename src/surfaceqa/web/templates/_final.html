@@ -1,0 +1,27 @@
+{% set c = subject.comparison %}
+{% if c %}
+<section class="reviews">
+<h2>Submitted reviews</h2>
+<table class="subjects">
+<thead><tr><th>Item</th>{% for name in c.reviewers %}<th>{{ name }}</th>{% endfor %}{% if c.has_final %}<th>Final</th>{% endif %}</tr></thead>
+<tbody>
+{% for row in c.rows %}
+<tr><td>{{ row.title }}</td>{% for cell in row.cells %}<td>{{ cell.label }}{% if cell.note %} <span class="muted">{{ cell.note }}</span>{% endif %}</td>{% endfor %}{% if c.has_final %}<td>{{ row.final }}</td>{% endif %}</tr>
+{% endfor %}
+</tbody>
+</table>
+{% for line in c.unratable %}<p class="note">{{ line }}</p>{% endfor %}
+{% if c.marks %}
+<p class="note">Marked problems:</p>
+<ul class="marklist">{% for m in c.marks %}<li>{{ m.reviewer }}: {{ m.region }}, {{ m.kind }}{% if m.note %} <span class="muted">{{ m.note }}</span>{% endif %}</li>{% endfor %}</ul>
+{% endif %}
+{% if subject.final_stale %}<p class="note">The reviews changed after the final labels were made. Run <code>surfaceqa finalize</code> again.</p>{% endif %}
+</section>
+{% endif %}
+{% for e in subject.earlier %}
+<section class="reviews">
+<h2>Previous run</h2>
+<p class="note">Your review of {{ e.submitted }} (run {{ e.run }}, grade {{ e.grade or "none" }}). The surfaces have changed since this review; the subject needs to be reviewed again.</p>
+<ul class="marklist">{% for row in e.rows if row.label %}<li>{{ row.title }}: {{ row.label }}{% if row.note %} <span class="muted">{{ row.note }}</span>{% endif %}</li>{% endfor %}</ul>
+</section>
+{% endfor %}

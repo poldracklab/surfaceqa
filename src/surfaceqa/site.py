@@ -2,6 +2,8 @@
 
 import json
 import shutil
+from dataclasses import dataclass
+from functools import cache
 from importlib import resources
 from pathlib import Path
 from urllib.parse import quote
@@ -11,14 +13,26 @@ from jinja2 import Environment, PackageLoader, select_autoescape
 from surfaceqa.build import load_meta
 from surfaceqa.layout import current_run_dir
 from surfaceqa.checklist import checklist_sections, finding_text, scored_findings
+from surfaceqa.protocol import load_protocol
 from surfaceqa.qa import load_findings
+from surfaceqa.queue import blind_order
 from surfaceqa.regions import REGIONS
 from surfaceqa.scoring import rank_within_pipeline
+from surfaceqa.site_reviews import review_fields
 
 VIEW_ORDER = ("coronal", "sagittal", "axial")
 NO_RUN_TEMPLATE = {"missing files": "missing.html", "build failed": "failed.html"}
 
 
+@dataclass(frozen=True)
+class View:
+    """Who a page is rendered for. The pages written by `build` use the default."""
+    reviewer: str | None = None
+    blind: bool = False
+    serving: bool = False  # rendered by `surfaceqa serve`, so ratings can be saved
+
+
+@cache
 def _environment() -> Environment:
     return Environment(loader=PackageLoader("surfaceqa", "web/templates"),
                        autoescape=select_autoescape(["html"]))
@@ -46,7 +60,12 @@ def _status(meta: dict | None, missing: dict | None, failed: bool) -> str:
     return "ready"
 
 
-def _subject_record(qa_dir: Path, folder: Path) -> dict:
+def _subject_record(qa_dir: Path, folder: Path, view: View) -> dict:
+    record = _build_record(qa_dir, folder)
+    return {**record, **review_fields(qa_dir, record, view)}
+
+
+def _build_record(qa_dir: Path, folder: Path) -> dict:
     key = folder.name
     meta = load_meta(qa_dir, key)
     missing = _read_json(folder / "missing.json")
@@ -93,12 +112,53 @@ def _review_order(record: dict) -> tuple:
     return (record["source"], score is None, -(score or 0.0), record["key"])
 
 
-def _subject_records(qa_dir: Path) -> list[dict]:
+HIDDEN = {"score": None, "rank": None, "largest": "", "n_findings": None, "qa": None,
+          "not_run": [], "partial": []}
+
+
+def _hide_indicators(record: dict) -> dict:
+    """Blind review: nothing the indicators produced reaches the page."""
+    if not record["hide_indicators"]:
+        return record
+    return {**record, **HIDDEN, "sections": checklist_sections(None)}
+
+
+def _ordered(records: list[dict], view: View) -> list[dict]:
+    if not view.blind or view.reviewer is None:
+        return sorted(records, key=_review_order)
+    by_key = {record["key"]: record for record in records}
+    return [by_key[key] for key in blind_order(list(by_key), view.reviewer)]
+
+
+def subject_records(qa_dir: Path, view: View = View()) -> list[dict]:
+    """Every subject in the QA directory as `view.reviewer` may see it, in review order."""
+    qa_dir = Path(qa_dir)
     root = qa_dir / "subjects"
     folders = sorted(p for p in root.iterdir() if p.is_dir()) if root.is_dir() else []
-    records = [_subject_record(qa_dir, folder) for folder in folders]
+    records = [_subject_record(qa_dir, folder, view) for folder in folders]
     _add_ranks(records)
-    return sorted(records, key=_review_order)
+    return _ordered([_hide_indicators(record) for record in records], view)
+
+
+def _needs_name(view: View) -> bool:
+    return view.serving and view.blind and view.reviewer is None
+
+
+def _context(view: View, root: str, here: str) -> dict:
+    return {"view": view, "root": root, "here": here, "protocol": load_protocol(),
+            "reviewing": view.serving and view.reviewer is not None}
+
+
+def render_index(records: list[dict], view: View = View()) -> str:
+    name = "name.html" if _needs_name(view) else "index.html"
+    return _environment().get_template(name).render(subjects=records, **_context(view, "", "/"))
+
+
+def render_subject(record: dict, view: View = View()) -> str:
+    name = "subject.html" if record["has_run"] else NO_RUN_TEMPLATE[record["status"]]
+    here = f"/subjects/{quote(record['key'])}/"
+    template = _environment().get_template("name.html" if _needs_name(view) else name)
+    return template.render(subject=record, views=VIEW_ORDER, **_context(view, "../../", here))
 
 
 def _copy_static(qa_dir: Path) -> None:
@@ -107,19 +167,11 @@ def _copy_static(qa_dir: Path) -> None:
         shutil.copytree(path, qa_dir / "static", dirs_exist_ok=True)
 
 
-def _write_subject_page(env: Environment, qa_dir: Path, record: dict) -> None:
-    name = "subject.html" if record["has_run"] else NO_RUN_TEMPLATE[record["status"]]
-    template = env.get_template(name)
-    html = template.render(subject=record, views=VIEW_ORDER, root="../../")
-    (qa_dir / "subjects" / record["key"] / "index.html").write_text(html)
-
-
 def write_site(qa_dir: Path) -> None:
+    """The read-only pages: what `surfaceqa serve` shows to someone who has not given a name."""
     qa_dir = Path(qa_dir)
-    env = _environment()
-    records = _subject_records(qa_dir)
+    records = subject_records(qa_dir)
     _copy_static(qa_dir)
     for record in records:
-        _write_subject_page(env, qa_dir, record)
-    index = env.get_template("index.html").render(subjects=records, root="")
-    (qa_dir / "index.html").write_text(index)
+        (qa_dir / "subjects" / record["key"] / "index.html").write_text(render_subject(record))
+    (qa_dir / "index.html").write_text(render_index(records))

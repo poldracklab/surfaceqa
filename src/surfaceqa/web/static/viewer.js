@@ -8,6 +8,9 @@ const FINDING_RGB = "0, 229, 255";
 const HINT_RGB = "255, 170, 0"; // places to look, which are not counted as findings
 const WHEEL_STEP = 40; // wheel delta that moves one slice
 const DRAG_THRESHOLD = 3; // pixels of movement before a press becomes a pan
+const SNAP_MM = 3; // a mark placed this close to a drawn contour sits on it
+const MARK_RGB = "255, 79, 216";
+const MARK_REACH = 1; // slices on either side of a mark on which it is drawn
 
 const root = document.getElementById("viewer");
 const runUrl = root.dataset.run;
@@ -19,6 +22,8 @@ const state = {
   findings: [],
   voxels: null, // Uint16Array of R, A, S triples for every finding
   highlight: null,
+  marks: [], // problems the reviewer has marked: {grid, ...}
+  pick: null, // while the reviewer is placing a mark: the function that receives the point
   layout: "three",
   wholeImage: false,
   focusMm: null,
@@ -175,6 +180,20 @@ function drawFindings(v, i) {
   }
 }
 
+// The reviewer's marks: a ring, solid on the mark's own slice and faint on its neighbours.
+function drawMarks(v, i) {
+  for (const mark of L.marksOnSlice(state.marks, v.plane, i, MARK_REACH)) {
+    const {x, y} = L.gridToScreen(mark.grid, v.plane);
+    const [cx, cy] = toCanvas(v, x, y);
+    const here = Math.round(mark.grid[v.plane.axis]) === i;
+    v.ctx.beginPath();
+    v.ctx.arc(cx, cy, 9, 0, 2 * Math.PI);
+    v.ctx.strokeStyle = `rgba(${MARK_RGB}, ${here ? 1 : 0.45})`;
+    v.ctx.lineWidth = 2;
+    v.ctx.stroke();
+  }
+}
+
 function drawCrosshairs(v) {
   const cross = L.crosshairs(state.cursor, v.plane);
   const [cx, cy] = toCanvas(v, cross.x, cross.y);
@@ -198,6 +217,7 @@ function draw(v) {
   drawImage(v, i);
   drawFindings(v, i);
   drawContours(v, i);
+  drawMarks(v, i);
   drawCrosshairs(v);
   v.panel.querySelector(".readout").textContent = `${v.name}  slice ${i + 1} / ${v.plane.n_slices}`;
   v.slider.value = i;
@@ -258,7 +278,48 @@ function onPointerUp(v, event) {
   if (!press || press.moved) return;
   const [x, y] = fromCanvas(v, ...pointerPosition(v, event));
   if (x < -0.5 || y < -0.5 || x > v.plane.width - 0.5 || y > v.plane.height - 0.5) return;
+  if (state.pick) return finishPick(pickedPoint(v, x, y));
   state.cursor = L.screenToGrid(x, y, state.cursor[v.plane.axis], v.plane, state.meta.shape);
+  drawAll();
+}
+
+// The contours drawn on the current slice of a view, by surface.
+function shownSegments(v) {
+  const i = state.cursor[v.plane.axis];
+  const shown = {};
+  if (!v.contours) return shown;
+  for (const name of Object.keys(state.meta.surfaces)) {
+    if (!surfaceVisible(name) || !v.contours.index.surfaces[name]) continue;
+    shown[name] = L.sliceSegments(v.contours.buffer, v.contours.index, name, i);
+  }
+  return shown;
+}
+
+// Where a click places a mark: on the nearest drawn contour if one is close, else where clicked.
+function pickedPoint(v, x, y) {
+  const snap = L.nearestOnContours(shownSegments(v), x, y, SNAP_MM, pixelSize(v.plane));
+  const at = snap || {x, y, surface: null};
+  const slice = state.cursor[v.plane.axis];
+  return {grid: L.screenToGridExact(at.x, at.y, slice, v.plane), surface: at.surface};
+}
+
+function finishPick(point) {
+  const resolve = state.pick;
+  state.pick = null;
+  root.classList.remove("picking");
+  if (resolve) resolve(point);
+}
+
+// The next click on a view gives a point for a mark instead of moving the views.
+// Resolves with {grid, surface}, or null when cancelled with Escape or by another pick.
+function pick() {
+  finishPick(null);
+  root.classList.add("picking");
+  return new Promise((resolve) => { state.pick = resolve; });
+}
+
+function setMarks(marks) {
+  state.marks = marks;
   drawAll();
 }
 
@@ -303,12 +364,13 @@ function setSurfaces(shown) {
 }
 
 function typing(event) {
-  return ["INPUT", "TEXTAREA", "SELECT"].includes(event.target.tagName) && event.target.type !== "checkbox";
+  return L.isTyping(event.target);
 }
 
 const KEY_STEPS = {ArrowUp: 1, ArrowDown: -1, ArrowRight: 1, ArrowLeft: -1, PageUp: 10, PageDown: -10};
 
 function onKeyDown(event) {
+  if (event.key === "Escape" && state.pick) return finishPick(null);
   if (typing(event)) return;
   if (L.isHideKey(event)) {
     if (!state.keyHide) setKeyHide(true);
@@ -344,6 +406,7 @@ function bindView(v) {
 function bindToolbar() {
   for (const key of ["surfaces", "pial", "white", "findings"]) {
     const box = document.getElementById(`show-${key}`);
+    if (!box) continue; // the findings box is absent in a blind review
     box.addEventListener("change", () => { state.show[key] = box.checked; drawAll(); });
   }
   for (const button of root.querySelectorAll(".layout")) {
@@ -377,6 +440,7 @@ async function loadContours(v) {
 
 // Findings are optional: a subject without them still gets the viewer.
 async function loadFindings() {
+  if (root.dataset.findings === "off") return; // blind review: not asked for, not shown
   try {
     const found = await fetch(`${runUrl}findings.json`).then((r) => (r.ok ? r.json() : null));
     if (!found || !found.findings.length) return;
@@ -453,5 +517,5 @@ async function start() {
 }
 
 const ready = start();
-window.surfaceqaViewer = {ready, goTo, goToSlice, setHighlight, setLayout, setSurfaces};
+window.surfaceqaViewer = {ready, goTo, goToSlice, setHighlight, setLayout, setSurfaces, setMarks, pick};
 ready.catch(showError);

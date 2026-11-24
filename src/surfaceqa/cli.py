@@ -1,4 +1,4 @@
-"""Command line entry point: surfaceqa build | serve."""
+"""Command line entry point: surfaceqa build | serve | finalize | export."""
 
 import argparse
 import sys
@@ -24,6 +24,14 @@ def _parser() -> argparse.ArgumentParser:
     serve.add_argument("qa_dir", type=Path)
     serve.add_argument("--host", default="127.0.0.1")
     serve.add_argument("--port", type=int, default=8765)
+    serve.add_argument("--blind", action="store_true",
+                       help="shuffle the subjects per reviewer and hide indicator results until "
+                            "the reviewer submits")
+    finalize = commands.add_parser("finalize", help="combine the reviewers' ratings into final labels")
+    finalize.add_argument("qa_dir", type=Path)
+    export = commands.add_parser("export", help="write the ratings, marks, final labels and indicators as tables")
+    export.add_argument("qa_dir", type=Path)
+    export.add_argument("--out", type=Path, help="folder for the tables (default: export/ in the QA directory)")
     return parser
 
 
@@ -69,19 +77,59 @@ def _build(args: argparse.Namespace) -> int:
 def _serve(args: argparse.Namespace) -> int:
     import uvicorn
 
-    from surfaceqa.server import create_app
+    from surfaceqa import server
 
     qa_dir = args.qa_dir.resolve()
     if not (qa_dir / "index.html").is_file():
         return _fail(f"{qa_dir} has no index.html; run `surfaceqa build` first")
     print(f"surfaceqa: http://{args.host}:{args.port}/")
-    uvicorn.run(create_app(qa_dir), host=args.host, port=args.port, log_level="warning")
+    uvicorn.run(server.create_app(qa_dir, blind=args.blind), host=args.host, port=args.port, log_level="warning")
     return 0
+
+
+def _qa_dir(args: argparse.Namespace) -> Path | None:
+    qa_dir = args.qa_dir.resolve()
+    return qa_dir if (qa_dir / "subjects").is_dir() else None
+
+
+def _not_a_qa_dir(args: argparse.Namespace) -> int:
+    return _fail(f"{args.qa_dir} is not a QA directory; make one with `surfaceqa build`")
+
+
+def _finalize(args: argparse.Namespace) -> int:
+    from surfaceqa.finalize import describe_disagreement, finalize
+
+    qa_dir = _qa_dir(args)
+    if qa_dir is None:
+        return _not_a_qa_dir(args)
+    records = finalize(qa_dir)
+    write_site(qa_dir)
+    for record in records:
+        if record["status"] == "disagreement":
+            print(describe_disagreement(record))
+    counts = {s: sum(r["status"] == s for r in records)
+              for s in ("agreed", "single", "settled", "disagreement", "unreviewed")}
+    print(", ".join(f"{n} {status}" for status, n in counts.items() if n))
+    return 0
+
+
+def _export(args: argparse.Namespace) -> int:
+    from surfaceqa.export import export_tables
+
+    qa_dir = _qa_dir(args)
+    if qa_dir is None:
+        return _not_a_qa_dir(args)
+    for path in export_tables(qa_dir, args.out):
+        print(path)
+    return 0
+
+
+COMMANDS = {"build": _build, "serve": _serve, "finalize": _finalize, "export": _export}
 
 
 def main(argv: list[str] | None = None) -> int:
     args = _parser().parse_args(argv)
-    return _build(args) if args.command == "build" else _serve(args)
+    return COMMANDS[args.command](args)
 
 
 if __name__ == "__main__":

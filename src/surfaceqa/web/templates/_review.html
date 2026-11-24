@@ -1,0 +1,11 @@
+<article class="item overall" id="overall">
+<h3>Overall</h3>
+<label>Grade <select id="grade"><option value="">not chosen</option>{% for grade in protocol.grades %}<option value="{{ grade }}">{{ grade }}</option>{% endfor %}</select></label>
+<textarea id="notes" rows="3" maxlength="2000" placeholder="Notes on this subject" aria-label="Notes on this subject"></textarea>
+<label><input type="checkbox" id="unratable"> This subject cannot be rated</label>
+<input type="text" id="unratable-reason" placeholder="Why it cannot be rated" maxlength="2000" hidden>
+<p id="remaining" class="note"></p>
+<ul id="missing" class="missing"></ul>
+<p id="save-status" class="note" role="status"></p>
+<p class="actions"><button type="button" id="submit">Submit review</button> <button type="button" id="skip">Skip for now</button> <a href="/next?after={{ subject.key | urlencode }}">Next subject</a></p>
+</article>

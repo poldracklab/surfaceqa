@@ -1,0 +1,7 @@
+{% macro rating(item_id, scale) %}
+<div class="rating">
+{% for level in scale %}<label title="{{ level.anchor }}"><input type="radio" name="rate-{{ item_id }}" value="{{ level.id }}"><kbd>{{ level.key }}</kbd> {{ level.label }}</label>{% endfor %}
+<span class="unrated">unrated</span>
+<input type="text" class="item-note" placeholder="Note" maxlength="2000" aria-label="Note">
+</div>
+{% endmacro %}

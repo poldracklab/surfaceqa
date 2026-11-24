@@ -65,3 +65,37 @@ td.muted { color: var(--muted); }
 .layouts .layout:last-child { border-radius: 0 4px 4px 0; }
 .layouts .layout.active { background: #2f3a21; border-color: #ffe100; position: relative; }
 .spot.hint { border-color: #b97a00; }
+header.site { display: flex; justify-content: space-between; align-items: center; gap: 12px; }
+.who { font-weight: 400; font-size: 13px; }
+.who form { display: inline; }
+.who input, .rating input[type=text], #notes, #unratable-reason, #grade, .marks select, .marks input {
+  background: #1d2329; color: var(--text); border: 1px solid var(--line); border-radius: 4px; padding: 3px 6px; font: inherit; font-size: 13px; }
+button { font: inherit; }
+.who button, .actions button, .mark-here, .accept, .marks button {
+  background: #1d2329; color: var(--text); border: 1px solid var(--line); border-radius: 4px; padding: 3px 10px; cursor: pointer; font-size: 13px; }
+.rating { display: flex; flex-wrap: wrap; gap: 4px 12px; align-items: center; margin-top: 8px; font-size: 13px; }
+.rating label { cursor: pointer; white-space: nowrap; }
+.rating kbd { color: var(--muted); font-size: 11px; margin: 0 2px; }
+.rating .item-note { flex: 1 1 100%; }
+.unrated { color: #ffd866; }
+.item.rated .unrated { display: none; }
+.item.current { box-shadow: -3px 0 0 #ffe100; padding-left: 8px; margin-left: -8px; }
+.accept { padding: 2px 6px; color: var(--muted); }
+.mark-here { margin-top: 6px; }
+.mark-here.armed { border-color: #ff4fd8; color: #ff4fd8; }
+.marks { list-style: none; margin: 6px 0 0; padding: 0; font-size: 13px; }
+.marks li { display: flex; flex-wrap: wrap; gap: 4px; align-items: center; padding: 4px 0; border-top: 1px dashed var(--line); }
+.marks li input { flex: 1 1 120px; min-width: 0; }
+.overall label { display: block; margin: 6px 0; font-size: 13px; }
+#notes, #unratable-reason { width: 100%; }
+ul.missing { color: #ffd866; font-size: 13px; padding-left: 18px; margin: 4px 0; }
+#save-status.error { color: #ff8a80; }
+.actions a { margin-left: 8px; font-size: 13px; }
+.reviews { max-width: 1100px; }
+.reviews .muted, .marklist .muted { color: var(--muted); font-size: 12px; }
+.marklist { font-size: 13px; padding-left: 18px; }
+.help { position: fixed; right: 16px; top: 48px; z-index: 10; background: #1a1f24; border: 1px solid var(--line); border-radius: 6px; padding: 10px 16px; max-width: 420px; font-size: 13px; box-shadow: 0 6px 24px rgba(0,0,0,.6); }
+.help dl { display: grid; grid-template-columns: auto 1fr; gap: 3px 12px; margin: 0; }
+.help dt { color: var(--muted); white-space: nowrap; }
+.help dd { margin: 0; }
+.viewer.picking canvas { cursor: cell; }

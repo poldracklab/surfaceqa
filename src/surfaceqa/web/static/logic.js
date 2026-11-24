@@ -139,3 +139,69 @@ export function fitBox(viewW, viewH, pixel, box, pad) {
     dy: viewH / 2 - ((box.y0 + box.y1) / 2 + 0.5) * pixel.v * scale,
   };
 }
+
+// ---- reviewing ----
+
+// Nearest point to (x, y) on one segment a-b, with distances in mm.
+function nearestOnSegment(ax, ay, bx, by, x, y, pixel) {
+  const ux = (bx - ax) * pixel.h, uy = (by - ay) * pixel.v;
+  const wx = (x - ax) * pixel.h, wy = (y - ay) * pixel.v;
+  const length2 = ux * ux + uy * uy;
+  const t = length2 === 0 ? 0 : Math.min(1, Math.max(0, (wx * ux + wy * uy) / length2));
+  const px = ax + t * (bx - ax), py = ay + t * (by - ay);
+  return {x: px, y: py, dist: Math.hypot((x - px) * pixel.h, (y - py) * pixel.v)};
+}
+
+// The point on the drawn contours nearest (x, y), with its surface, or null when none lies
+// within maxDist mm. segmentsBySurface: {name: [x1, y1, x2, y2, ...]} in image pixels.
+export function nearestOnContours(segmentsBySurface, x, y, maxDist, pixel = {h: 1, v: 1}) {
+  let best = null;
+  for (const [surface, seg] of Object.entries(segmentsBySurface)) {
+    for (let k = 0; k + 3 < seg.length; k += 4) {
+      const hit = nearestOnSegment(seg[k], seg[k + 1], seg[k + 2], seg[k + 3], x, y, pixel);
+      if (hit.dist <= maxDist && (best === null || hit.dist < best.dist)) best = {...hit, surface};
+    }
+  }
+  return best;
+}
+
+// Like screenToGrid, but keeps the position between voxels: a mark sits on the contour.
+export function screenToGridExact(x, y, slice, plane) {
+  const grid = [0, 0, 0];
+  grid[plane.axis] = slice;
+  grid[plane.h_axis] = flip(x, plane.width, plane.h_flip);
+  grid[plane.v_axis] = flip(y, plane.height, plane.v_flip);
+  return grid;
+}
+
+// The marks within `reach` slices of a slice of a plane.
+export function marksOnSlice(marks, plane, slice, reach) {
+  return marks.filter((mark) => Math.abs(Math.round(mark.grid[plane.axis]) - slice) <= reach);
+}
+
+// How many things are still to do before a review can be submitted (marks not counted).
+export function itemsRemaining(review, itemIds) {
+  if (review.unratable && review.unratable.trim()) return 0;
+  const unrated = itemIds.filter((id) => !review.items[id] || review.items[id].rating === null);
+  return unrated.length + (review.grade ? 0 : 1);
+}
+
+// The level of a scale chosen by a number key, or null.
+export function levelForKey(key, scale) {
+  const level = scale.find((entry) => entry.key === key);
+  return level ? level.id : null;
+}
+
+// Next checklist item; stops at the ends; from "none" starts at the first.
+export function stepItem(current, delta, n) {
+  if (n === 0) return null;
+  if (current === null) return 0;
+  return Math.min(n - 1, Math.max(0, current + delta));
+}
+
+// True when the keys pressed are text for this element. A rating button, tick box or slider
+// that was clicked keeps the focus, and the keys must go on working as shortcuts there.
+export function isTyping(target) {
+  if (target.tagName === "TEXTAREA" || target.tagName === "SELECT") return true;
+  return target.tagName === "INPUT" && !["radio", "checkbox", "range", "button"].includes(target.type);
+}
