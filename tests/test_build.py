@@ -238,11 +238,11 @@ def test_meta_records_grid_to_tkr_that_inverts_the_display_transform(tmp_path):
 
 
 def test_meta_records_grid_to_scanner(tmp_path):
-    from surfaceqa.geometry import load_display_volume
-
     subj = write_subject(tmp_path / "fastsurfer", cras=(3.0, -2.0, 5.0))
     ref = find_subjects([subj])[0]
     build_subject(ref, tmp_path / "qa")
-    recorded = np.array(load_meta(tmp_path / "qa", ref.key)["grid_to_scanner"])
-    assert recorded.shape == (4, 4)
-    assert np.allclose(recorded, load_display_volume(subj / "mri" / "orig.mgz").grid_to_scanner)
+    meta = load_meta(tmp_path / "qa", ref.key)
+    to_scanner, to_tkr = np.array(meta["grid_to_scanner"]), np.array(meta["grid_to_tkr"])
+    assert to_scanner.shape == (4, 4) and np.allclose(to_scanner[:3, :3], to_tkr[:3, :3])
+    # a conformed (LIA) volume: scanner coordinates are surface coordinates moved by c_ras
+    assert np.allclose(to_scanner[:3, 3] - to_tkr[:3, 3], [3.0, -2.0, 5.0], atol=1e-4)
