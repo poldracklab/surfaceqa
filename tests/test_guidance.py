@@ -43,11 +43,11 @@ def test_fastsurfer_pial_problem_has_two_steps_in_the_documented_order():
     assert first["rerun"]["label"] != second["rerun"]["label"]
     for step in (first, second):
         assert f"{S}/{step['edit']}" in step["freeview"]
+        assert "-ras 1.50 -20.00 3.25 tkreg" in step["freeview"]
+        assert step["text"] and step["paint"]
     # the segmentation is shown with its label colours, which is what label editing needs
     assert f"{S}/{first['edit']}:colormap=lut:opacity=0.4" in first["freeview"]
     assert "colormap" not in second["freeview"]
-        assert "-ras 1.50 -20.00 3.25 tkreg" in step["freeview"]
-        assert step["text"] and step["paint"]
     assert out["never_edit"] == NEVER_EDIT and out["cautions"] and out["rerun_note"]
     assert out["warning"] is None and out["edited"] is False and out["docs"].startswith("https://")
 
