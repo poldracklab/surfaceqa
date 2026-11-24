@@ -1,12 +1,8 @@
 # surfaceqa
 
 A browser tool for reviewing FreeSurfer and FastSurfer cortical surfaces, following the
-procedure Kendrick Kay demonstrates in his surface QA video: scroll the T1 with the pial and
+procedure Kendrick Kay demonstrates in his [surface QA video](https://www.youtube.com/watch?v=CVPmWWE_NJs): scroll the T1 with the pial and
 white surfaces drawn on it, check the known trouble spots, rate what you see, grade the subject.
-
-A person makes every judgment. The automated indicators only order the subjects and point at
-places to look; a low score does not mean the surfaces are correct, and no indicator result is
-ever recorded as a rating.
 
 ## Quick start
 
