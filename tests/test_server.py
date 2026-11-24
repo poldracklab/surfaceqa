@@ -691,10 +691,9 @@ def test_the_report_tables_are_served_and_nothing_else_from_that_folder(qa_revie
         assert response.status_code == 200 and response.text.startswith("source\t")
     (qa_reviewed / "report" / "other.html").write_text("x")
     for path in ("/report/other.html", "/report/../ratings/x.json", "/report/%2e%2e/final/x.json",
-                 "/report/INDEX.HTML", "/report/index.html/", "/report/sub/index.html"):
-        assert client.get(path).status_code in (404, 307), path
-        assert "Error distribution" not in TestClient(create_app(qa_reviewed)).get(path).text or \
-            path == "/report/index.html/", path
+                 "/report/INDEX.HTML", "/report/sub/index.html"):
+        followed = TestClient(create_app(qa_reviewed), follow_redirects=True).get(path)
+        assert followed.status_code == 404, path
 
 
 def test_subject_links_on_the_served_report_open_the_subject_pages(qa_reviewed):

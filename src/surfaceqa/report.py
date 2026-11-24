@@ -119,3 +119,11 @@ def write_report(qa_dir: Path, now: datetime | None = None) -> Path:
     _write_tables(folder, sections)
     return folder / PAGE
 
+
+
+def report_made(qa_dir: Path) -> str | None:
+    """When the report page was last made, or None when there is none."""
+    page = Path(qa_dir) / REPORT_DIR / PAGE
+    if not page.is_file():
+        return None
+    return datetime.fromtimestamp(page.stat().st_mtime).strftime("%Y-%m-%d %H:%M")

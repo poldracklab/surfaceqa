@@ -3,6 +3,7 @@
 <h1>Subjects</h1>
 <p class="note">Subjects are ordered by suspicion score within each source folder; scores from different pipelines, versions or resolutions are not comparable. The score only orders the work; it does not mean a subject is good or bad. "ready" means the report was rendered, not that the surfaces are good. A subject is reviewed only when a name is listed under "Reviewed by".</p>
 {% if reviewing %}<p><a href="/next">Next subject to review</a></p>{% endif %}
+{% if report is not none %}<form method="post" action="/report" class="report">How the errors are spread over subjects and regions: {% if report.made %}<a href="/report/index.html">Report</a> <span class="muted">made {{ report.made }}</span> {% endif %}<button type="submit">{{ "Update report" if report.made else "Make report" }}</button></form>{% endif %}
 <table class="subjects">
 <thead><tr><th>Subject</th><th>Source</th><th>Pipeline</th><th>Status</th><th>Score</th><th>Rank</th><th>Findings</th><th>Largest</th><th>Indicators</th><th>Reviewed by</th>{% if reviewing %}<th>Your review</th>{% endif %}<th>Final grade</th><th>Needs fix</th></tr></thead>
 <tbody>

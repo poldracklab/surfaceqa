@@ -12,6 +12,7 @@ from fastapi.responses import (FileResponse, HTMLResponse, JSONResponse, PlainTe
 from fastapi.staticfiles import StaticFiles
 
 from surfaceqa.layout import read_json
+from surfaceqa.report import PAGE, REPORT_DIR, TABLES, report_made, write_report
 from surfaceqa.reviews import valid_reviewer
 from surfaceqa.server_reviews import (Refused, current_review, has_submitted, next_subject,
                                       store_review)
@@ -94,7 +95,33 @@ def clear_reviewer():
 @router.get("/index.html", response_class=HTMLResponse)
 def index(request: Request):
     view = _view(request)
-    return render_index(subject_records(_qa_dir(request), view), view)
+    report = None if view.blind else {"made": report_made(_qa_dir(request))}
+    return render_index(subject_records(_qa_dir(request), view), view, report)
+
+
+def _report_allowed(request: Request) -> None:
+    """The report shows every reviewer's ratings in aggregate, so a blind server has none."""
+    if request.app.state.blind:
+        raise HTTPException(404)
+
+
+@router.post("/report")
+def make_report(request: Request):
+    """Make the report again from the reviews as they are now, and open it."""
+    _report_allowed(request)
+    write_report(_qa_dir(request))
+    return RedirectResponse(f"/{REPORT_DIR}/{PAGE}", status_code=303)
+
+
+@router.get("/report/{name}")
+def report_file(request: Request, name: str):
+    """The report page or one of its tables, as last made. Exact names only."""
+    _report_allowed(request)
+    path = _qa_dir(request) / REPORT_DIR / name
+    if name not in (PAGE, *TABLES) or not path.is_file():
+        raise HTTPException(404)
+    kind = "text/html" if name == PAGE else "text/tab-separated-values"
+    return FileResponse(path, media_type=kind, headers={"cache-control": "no-cache"})
 
 
 @router.get("/subjects/{key}/", response_class=HTMLResponse)
