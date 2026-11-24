@@ -19,7 +19,8 @@ const ui = {
   remaining: document.getElementById("remaining"), missing: document.getElementById("missing"),
   status: document.getElementById("save-status"), help: document.getElementById("help"),
 };
-const state = {current: null, timer: null, saving: Promise.resolve(), dirty: false, locked: false, viewer: null};
+const state = {current: null, timer: null, saving: Promise.resolve(), dirty: false, locked: false, viewer: null,
+  failures: 0, retry: null};
 
 function scaleOf(id) {
   return PASSES.includes(id) ? protocol.pass_scale : protocol.region_scale;
@@ -124,20 +125,36 @@ async function send(method, path, body) {
   return {status: response.status, result};
 }
 
+// A save that failed because the server did not answer is tried again without waiting for
+// the reviewer's next change, less often each time.
+function retryLater() {
+  state.failures += 1;
+  clearTimeout(state.retry);
+  state.retry = setTimeout(queueSave, L.retryDelay(state.failures));
+}
+
 async function saveNow(extra = {}) {
   if (state.locked) return false;
   state.dirty = false;
   try {
     const {status, result} = await send("PUT", `/api/review/${encodeURIComponent(key)}`, payload(extra));
     if (status === 409) { lock(result.detail); return false; }
-    if (status !== 200) { state.dirty = true; showStatus(`Not saved: ${detailText(result.detail)}`, true); return false; }
+    if (status !== 200) {
+      state.dirty = true;
+      showStatus(`Not saved: ${detailText(result.detail)}`, true);
+      if (status >= 500) retryLater(); // a refusal (4xx) will not go away by asking again
+      return false;
+    }
+    state.failures = 0;
+    clearTimeout(state.retry);
     review.saved = result.review.saved;
     showStatus(`Saved ${new Date().toLocaleTimeString([], {hour: "2-digit", minute: "2-digit"})}`);
     refreshGuidance();
     return true;
   } catch (error) {
     state.dirty = true;
-    showStatus(`Not saved: the server could not be reached (${error.message})`, true);
+    showStatus(`Not saved: the server could not be reached (${error.message}). Trying again.`, true);
+    retryLater();
     return false;
   }
 }

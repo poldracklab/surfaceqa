@@ -23,3 +23,14 @@ def read_json(path: Path) -> dict | None:
         return json.loads(path.read_text())
     except (OSError, ValueError):
         return None
+
+
+def file_signature(root: Path, rels) -> dict[str, list[int]]:
+    """Size and modification time of each of these files that exists, to detect changes."""
+    signature = {}
+    for rel in rels:
+        path = Path(root) / rel
+        if path.is_file():
+            stat = path.stat()
+            signature[rel] = [stat.st_size, stat.st_mtime_ns]
+    return signature

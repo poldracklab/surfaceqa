@@ -7,24 +7,20 @@ from pathlib import Path
 import nibabel as nib
 import numpy as np
 
+from surfaceqa.layout import file_signature
+from surfaceqa.pipelines import HEMIS
 from surfaceqa.sphere import nearest, target_points
 
 MAP_FILE = "thickness_map.npz"
 MAP_VERSION = 1  # raise when the sampling changes, so maps are made again
-HEMIS = ("lh", "rh")
 INPUTS = ("surf/{hemi}.sphere.reg", "surf/{hemi}.thickness", "label/{hemi}.cortex.label")
 
 
 def _signature(subject_dir: Path) -> str:
-    """Size and modification time of every input that exists, to detect changes."""
-    found = {}
-    for hemi in HEMIS:
-        for rel in (pattern.format(hemi=hemi) for pattern in INPUTS):
-            path = subject_dir / rel
-            if path.is_file():
-                stat = path.stat()
-                found[rel] = [stat.st_size, stat.st_mtime_ns]
-    return json.dumps({"version": MAP_VERSION, "inputs": found}, sort_keys=True)
+    """What the map is made from, to detect changes."""
+    rels = [pattern.format(hemi=hemi) for hemi in HEMIS for pattern in INPUTS]
+    return json.dumps({"version": MAP_VERSION, "inputs": file_signature(subject_dir, rels)},
+                      sort_keys=True)
 
 
 def _hemi_map(subject_dir: Path, hemi: str) -> np.ndarray:

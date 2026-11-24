@@ -9,7 +9,7 @@ from pathlib import Path
 from surfaceqa.discover import SubjectRef
 from surfaceqa.edits import BFS, BFS_EDIT, FASTSURFER_SEG_EDIT, RECON_ALL_EDIT_FILES, WM, detect_edits, edit_state
 from surfaceqa.invocation import first_run_commands
-from surfaceqa.layout import current_run_dir, read_json
+from surfaceqa.layout import current_run_dir, file_signature, read_json
 from surfaceqa.pipelines import PipelineInfo
 
 PROVENANCE_VERSION = 3  # raise when what is recorded changes, so it is recorded again
@@ -22,9 +22,7 @@ SHAPE = {"command": (str, type(None)), "stages": list, "edited": (bool, type(Non
 
 def _signature(subject_dir: Path) -> dict[str, list[int]]:
     """Size and modification time of every file the record is made from."""
-    stats = {rel: (subject_dir / rel) for rel in WATCHED}
-    return {rel: [path.stat().st_size, path.stat().st_mtime_ns]
-            for rel, path in stats.items() if path.is_file()}
+    return file_signature(subject_dir, WATCHED)
 
 
 def _usable(record) -> bool:

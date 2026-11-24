@@ -16,6 +16,8 @@ WHY_SKIPPED = "no usable sphere.reg, thickness and cortex label, or no cohort va
 
 
 def _too_few(cohort: Cohort | None) -> str:
+    if cohort is not None and cohort.note:
+        return cohort.note
     count = 0 if cohort is None else cohort.n
     return f"needs {thresholds.MIN_COHORT} subjects in this source folder; there are {count}"
 
@@ -29,6 +31,7 @@ def _sphere_usable(sphere: np.ndarray | None) -> bool:
 def _comparable(surface: HemiSurface, hemi: str, cohort: Cohort) -> bool:
     return (_sphere_usable(surface.sphere) and surface.thickness is not None
             and surface.cortex is not None and hemi in cohort.median
+            and (len(surface.cortex) == 0 or int(surface.cortex.max()) < len(surface.thickness))
             and len(surface.sphere) == len(surface.thickness) == len(surface.pial_grid))
 
 
@@ -40,7 +43,7 @@ def _compared(surface: HemiSurface, median: np.ndarray, spread: np.ndarray) -> t
     usable = np.isfinite(excess) & (spread[at] > 0)
     deviations = np.divide(excess, spread[at], out=np.zeros(len(at)), where=usable)
     in_cortex = np.zeros(len(at), dtype=bool)
-    in_cortex[surface.cortex[surface.cortex < len(at)]] = True
+    in_cortex[surface.cortex] = True
     far = (usable & in_cortex & (deviations >= thresholds.COHORT_Z)
            & (excess >= thresholds.COHORT_MIN_MM))
     return far, float((usable & in_cortex).sum() / max(in_cortex.sum(), 1))

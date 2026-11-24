@@ -12,6 +12,7 @@ SURFACE_CANDIDATES = {
     "rh.white": ("rh.white",),
 }
 T1 = "mri/orig.mgz"
+HEMIS = ("lh", "rh")
 
 
 @dataclass(frozen=True)

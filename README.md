@@ -67,7 +67,8 @@ exported.
 4. Rate every item. A region rated "Major (needs fix)" needs at least one marked problem:
    press "Mark a problem" and click the misplaced contour (the mark snaps to the surface), or
    press "+ mark" next to a finding.
-5. Choose the overall grade and submit. Everything is saved as you go; submitting is refused,
+5. Choose the overall grade and submit. Everything is saved as you go (a save the server did
+   not answer is tried again by itself); submitting is refused,
    with a list, while anything is missing. A subject that cannot be rated at all is submitted
    with a reason instead.
 6. "Skip for now" puts the subject at the end of your queue.
@@ -97,7 +98,8 @@ A review can still be changed after it is submitted; it is then flagged as revis
 - A reviewer sees other reviewers' ratings, marks and the final labels for a subject only
   after submitting their own review of it. The names of those who have reviewed it are shown.
 - `--blind` shuffles the order of subjects per reviewer and hides the scores and findings of a
-  subject until that reviewer has submitted it. Nothing is shown until a name is given.
+  subject, and whether it was edited, until that reviewer has submitted it. A comparison with
+  another reconstruction never shows findings. Nothing is shown until a name is given.
 - `finalize`: where reviewers are within one step on an item, the final label is the lower
   one and their marks are pooled; two or more steps apart is a disagreement. Grades within one
   letter give the better grade; further apart is a disagreement. To settle a disagreement, the
@@ -133,7 +135,9 @@ The recipes are in `src/surfaceqa/recipes.json`.
 - Subjects of another version get the same recipes with a warning.
 
 A subject that shows signs of manual edits (edit files, edit flags or partial reruns in its
-logs) is marked "edited" on the pages and in the `edited` column of the export tables.
+logs) is marked "edited" on the pages and in the `edited` column of the export tables. When a
+file could not be read and nothing else shows an edit, the page says "unknown" and the column
+is blank.
 
 ## Comparing two reconstructions
 
@@ -157,10 +161,9 @@ as a finding, "thicker than the cohort": often a place where the pial surface to
 dura. Below 30 subjects the subject page says that this indicator did not run.
 
 Adding or rebuilding a subject changes the comparison for the whole folder, so the next `build`
-recomputes the indicators of that folder's subjects. Slices and contours are not redone. A build
-limited with `--subjects` updates only the subjects it names; the others catch up on the next
-full build. A subject whose folder was deleted from the source, or whose latest build failed,
-no longer counts.
+recomputes the indicators of that folder's subjects. Slices and contours are not redone. This
+also happens for the rest of a folder when a build is limited with `--subjects`. A subject whose
+folder was deleted from the source, or whose latest build failed, no longer counts.
 
 ## What is in a QA directory
 
