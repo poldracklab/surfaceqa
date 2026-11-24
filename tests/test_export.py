@@ -148,3 +148,20 @@ def test_notes_with_quotes_are_read_back_by_a_standard_reader(qa_reviewed):
     cat = {r["item"]: r for r in rows if r["reviewer"] == "cat"}
     assert cat["overall"]["note"] == '"starts with a quote, has "more" inside'
     assert cat["sinus"]["note"] == 'ends with a quote"'
+
+
+def test_every_table_says_whether_the_subject_was_edited(qa_reviewed, tmp_path):
+    from surfaceqa.build import build_all
+    from surfaceqa.discover import find_subjects
+    from surfaceqa.finalize import finalize
+
+    source = tmp_path / "fastsurfer"
+    (source / "sub-01" / "mri" / "aparc.DKTatlas+aseg.deep.manedit.mgz").write_bytes(b"x")
+    build_all(find_subjects([source]), qa_reviewed)
+    finalize(qa_reviewed)
+    export_tables(qa_reviewed)
+    for name in ("ratings", "marks", "final", "indicators"):
+        rows = _table(qa_reviewed, name)
+        edited = {row["key"]: row["edited"] for row in rows}
+        assert edited["fastsurfer__sub-01"] == "yes", name
+        assert all(value == "no" for key, value in edited.items() if key != "fastsurfer__sub-01"), name

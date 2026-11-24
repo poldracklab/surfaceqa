@@ -476,3 +476,142 @@ def test_the_consensus_reviewer_sees_the_reviews_being_settled(qa_reviewed):
     html = _page(qa_reviewed, FIRST, "consensus")
     assert "Submitted reviews" in html and "bob-note-quux" in html and "ann-note-xyzzy" in html
     assert html.count('type="radio"') == 33
+
+
+# ---- fix guidance --------------------------------------------------------------------------
+
+from surfaceqa.review_store import save_review
+from surfaceqa.settings import save_rerun_template
+from surfaceqa.site import render_guidance
+
+RECIPE = "freeview -v "
+
+
+def _major(qa, reviewer, key=RECON, submitted=True, note="", **ratings) -> None:
+    """A review of `key` with the sinus rated major (unless overridden) and one mark there."""
+    run = current_run_dir(qa, key).name
+    ratings = {"sinus": "major", **ratings}
+    review = make_review(reviewer, key, run, submitted=submitted, **ratings,
+                         marks=[{**make_mark("sinus"), "note": note}])
+    (submit_review if submitted else save_review)(qa, review)
+
+
+def _guidance_section(page: str) -> str:
+    return page.split('<section id="guidance"', 1)[1].split("</section>", 1)[0]
+
+
+def test_reviewer_gets_guidance_for_a_marked_problem_in_a_major_region(qa_reviewed):
+    _major(qa_reviewed, "dan", submitted=False, note="dan-mark-note")
+    section = _guidance_section(_page(qa_reviewed, RECON, "dan"))
+    assert "mri/brain.finalsurfs.manedit.mgz" in section and RECIPE in section
+    assert "recon-all -s sub-01 -autorecon-pial -T2pial -3T -parallel -openmp 8" in section
+    assert "dan-mark-note" in section and "From your review" in section
+    assert "Sagittal and transverse sinus" in section and "pial too far out" in section
+    assert "surfaceqa build" in section and "needs a new review" in section
+
+
+def test_fastsurfer_guidance_lists_what_must_not_be_edited(qa_reviewed):
+    _major(qa_reviewed, "dan", key=SECOND, submitted=False)
+    section = _guidance_section(_page(qa_reviewed, SECOND, "dan"))
+    assert "mri/mask.mgz" in section and "tmp/control.dat" in section
+    assert "--edits --surf_only" in section and "same container setup" in section
+    assert "cp " in section and "aparc.DKTatlas+aseg.deep.manedit.mgz" in section
+
+
+def test_a_mark_in_a_region_not_rated_major_gives_no_guidance(qa_reviewed):
+    _major(qa_reviewed, "dan", submitted=False, sinus="minor")
+    section = _guidance_section(_page(qa_reviewed, RECON, "dan"))
+    assert RECIPE not in section and "Fix guidance appears here" in section
+
+
+def test_another_reviewer_who_has_not_submitted_sees_no_guidance_from_others(qa_reviewed):
+    _major(qa_reviewed, "dan", note="dan-mark-note")
+    page = _page(qa_reviewed, RECON, "erin")
+    assert RECIPE not in page and "dan-mark-note" not in page
+    blind = _page(qa_reviewed, RECON, "erin", blind=True)
+    assert RECIPE not in blind and "dan-mark-note" not in blind
+
+
+def test_after_finalize_guidance_comes_from_the_final_labels(qa_reviewed):
+    _major(qa_reviewed, "dan", note="dan-mark-note")
+    _major(qa_reviewed, "erin", note="erin-mark-note")
+    finalize(qa_reviewed)
+    for reviewer in ("dan", None):
+        section = _guidance_section(_page(qa_reviewed, RECON, reviewer))
+        assert "From the final labels" in section
+        assert "dan-mark-note" in section and "erin-mark-note" in section
+        assert section.count(RECIPE) == 2
+    assert RECIPE not in _page(qa_reviewed, RECON, "fay")
+
+
+def test_final_marks_in_regions_that_are_not_major_in_the_end_are_left_out(qa_reviewed):
+    finalize(qa_reviewed)  # ann major with a mark, bob minor: the final label is minor
+    section = _guidance_section(_page(qa_reviewed, FIRST, "ann"))
+    assert "From the final labels" in section and RECIPE not in section
+
+
+def test_in_a_disagreement_each_reviewer_keeps_their_own_guidance(qa_reviewed):
+    _major(qa_reviewed, "dan", note="dan-mark-note")
+    run = current_run_dir(qa_reviewed, RECON).name
+    submit_review(qa_reviewed, make_review("erin", RECON, run))
+    finalize(qa_reviewed)
+    dan = _guidance_section(_page(qa_reviewed, RECON, "dan"))
+    assert "From your review" in dan and "dan-mark-note" in dan
+    assert RECIPE not in _page(qa_reviewed, RECON, "erin")
+    assert RECIPE not in _guidance_section(_page(qa_reviewed, RECON))
+
+
+def test_stale_final_labels_are_not_used_for_guidance(qa_reviewed):
+    _major(qa_reviewed, "dan", note="dan-mark-note")
+    finalize(qa_reviewed)
+    _major(qa_reviewed, "erin", note="erin-mark-note")
+    section = _guidance_section(_page(qa_reviewed, RECON, "dan"))
+    assert "From your review" in section and "erin-mark-note" not in section
+
+
+def test_static_page_shows_final_guidance_and_blind_without_a_name_shows_none(qa_reviewed):
+    _major(qa_reviewed, "dan", note="dan-mark-note")
+    finalize(qa_reviewed)
+    write_site(qa_reviewed)
+    static = (qa_reviewed / "subjects" / RECON / "index.html").read_text()
+    assert RECIPE in static and "From the final labels" in static
+    assert RECIPE not in _page(qa_reviewed, RECON, blind=True)
+
+
+def test_guidance_escapes_notes(qa_reviewed):
+    _major(qa_reviewed, "dan", submitted=False, note="<script>alert(1)</script>")
+    view = _view("dan")
+    raw = render_subject(_record(qa_reviewed, RECON, view), view)
+    assert "<script>alert(1)" not in raw and "&lt;script&gt;alert(1)" in raw
+
+
+def test_guidance_fragment_is_the_section_content_only(qa_reviewed):
+    _major(qa_reviewed, "dan", submitted=False)
+    fragment = render_guidance(_record(qa_reviewed, RECON, _view("dan")))
+    assert RECIPE in fragment and "<html" not in fragment and "<canvas" not in fragment
+    assert '<section id="guidance"' not in fragment
+
+
+def test_rerun_template_of_the_source_is_used(qa_reviewed):
+    _major(qa_reviewed, "dan", submitted=False)
+    save_rerun_template(qa_reviewed, ["freesurfer-8.2.0"], "ssh box {command}")
+    assert "ssh box recon-all -s sub-01 -autorecon-pial" in _page(qa_reviewed, RECON, "dan")
+    _major(qa_reviewed, "dan", key=SECOND, submitted=False)
+    assert "ssh box" not in _page(qa_reviewed, SECOND, "dan")
+
+
+def test_edited_subject_is_flagged_with_the_evidence(qa_reviewed, tmp_path):
+    source = tmp_path / "freesurfer-8.2.0"
+    (source / "sub-01" / "tmp").mkdir()
+    (source / "sub-01" / "tmp" / "control.dat").write_text("0 0 0\n")
+    build_all(find_subjects([source]), qa_reviewed)
+    page = _page(qa_reviewed, RECON)
+    assert "<dt>Edited</dt>" in page and "tmp/control.dat exists" in page
+    assert "edited" in _row(_index(qa_reviewed), RECON)
+    assert "<dt>Edited</dt>" not in _page(qa_reviewed, FIRST)
+    assert "edited" not in _row(_index(qa_reviewed), FIRST)
+
+
+def test_subject_without_a_run_has_no_guidance(qa):
+    page = (qa / "subjects" / "fastsurfer__sub-02" / "index.html").read_text()
+    assert RECIPE not in page
