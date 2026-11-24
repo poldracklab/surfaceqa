@@ -69,3 +69,19 @@ def test_segmentation_method_is_recorded(synth_subject, tmp_path):
     # recon-all 8 keeps the SynthSeg output its segmentation was copied from
     (old / "mri" / "synthseg.rca.mgz").write_bytes((old / "mri" / "aseg.presurf.mgz").read_bytes())
     assert load_subject_data(old, detect_pipeline(old)).seg_method == "network"
+
+
+def test_registration_sphere_is_loaded_and_tracked(tmp_path):
+    from surfaceqa.pipelines import detect_pipeline
+    from surfaceqa.subjectdata import input_signature, load_subject_data
+    from tests.synth import write_qa_files, write_subject
+
+    subj = write_subject(tmp_path / "fastsurfer")
+    write_qa_files(subj)
+    pipeline = detect_pipeline(subj)
+    data = load_subject_data(subj, pipeline)
+    assert data.hemis["lh"].sphere.shape == data.hemis["lh"].pial_grid.shape
+    assert data.cohort is None
+    assert "surf/lh.sphere.reg" in input_signature(subj, pipeline)
+    (subj / "surf" / "lh.sphere.reg").unlink()
+    assert load_subject_data(subj, pipeline).hemis["lh"].sphere is None
