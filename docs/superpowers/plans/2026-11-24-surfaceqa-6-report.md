@@ -24,7 +24,7 @@
 ## Decisions made in this plan (designer's calls, for the user to correct)
 
 1. **Two kinds of "error" are reported, kept apart.** First what reviewers recorded (ratings per region, marked problems by kind, grades); then, in its own section headed as automated, what the indicators found. The second is there because it exists before anyone has reviewed, and to show how well the indicators agree with the reviewers.
-2. **A command, not a page of the review server.** `surfaceqa report` writes `<qa>/report/index.html`, which opens from disk. A served page would show every reviewer's ratings in aggregate and break the rule that a reviewer sees others' ratings only after submitting; `export` and `finalize` are commands for the same reason.
+2. **A command, and a button on the main page** (changed at the user's request, 2026-11-24: "I'd like to be able to recreate the report from the main web page"). `surfaceqa report` writes `<qa>/report/index.html`, which also opens from disk. The index page of the review server has a "Report" link to the page last made, with its date, and an "Update report" button that makes it again and opens it. **In a blind review (`serve --blind`) the server offers neither and answers 404**: the report shows every reviewer's ratings in aggregate, which a blind reviewer must not see; there the coordinator uses the command. Without `--blind` the overview already shows all ratings to anyone who gives no name, so the report reveals nothing new.
 3. **Reviews are combined when the report is made**, with the same rule as `finalize` (within one step: the lower label; further apart: a disagreement; a `consensus` review stands alone). `finalize` need not have been run and nothing in `final/` is read or changed. Only submitted reviews count; the page says how many drafts were left out.
 4. **One section per source folder**, since pipelines, versions and cohorts do not compare. Review progress is also given for the whole directory.
 5. **What the page shows, per source folder:**
@@ -46,6 +46,7 @@
 3. A subject reviewed on an earlier run only (rebuilt since): it is "not reviewed" for the current run.
 4. Subject or source names with HTML or tab characters: escaped on the page, harmless in the tables.
 5. A `consensus` review beside the reviews it settles: counted once, and its marks only.
+6. A blind server never serves or writes the report, under any spelling of the address.
 
 ---
 
@@ -99,8 +100,21 @@
 - [ ] Tests first, on the `qa_reviewed` fixture and on a directory with no reviews: the page exists and names both sources; counts on the page equal the summary functions' (checked through the tables); "No submitted reviews yet." appears and no "0 subjects with major" style line does; no reviewer name and no note text from the fixture (`ann`, `bob`, `ann-note-xyzzy`, `mark-note-plugh`) is on the page; a subject named `<b>x</b>` is escaped; the page has no `<script` and no `http` reference; the three tables have the pinned headers; `main(["report", qa])` returns 0 and prints the path; `main(["report", not_a_qa_dir])` returns 2; nothing under `ratings/`, `final/` or `subjects/` is modified.
 - [ ] Run, see them fail. Commit tests. Implement (load the `dataviz` skill first). Run all tests. Commit.
 
-### Task 5: Real data, and review
+### Task 5: The report on the review server
+
+**Files:** Modify `src/surfaceqa/server.py`, `src/surfaceqa/site.py`, `src/surfaceqa/web/templates/index.html`; Test `tests/test_server.py`, `tests/test_site.py`.
+
+**Interfaces — Consumes:** `report.write_report`, `report.REPORT_DIR = "report"`, `report.TABLES` (the three file names). **Produces:**
+- `POST /report`: makes the report again and redirects (303) to `/report/index.html`.
+- `GET /report/index.html` and `GET /report/<table>.tsv` for the three tables: the files last written; 404 when there are none or for any other name.
+- All three answer 404 on a blind server.
+- The index page of a non-blind server: `<form method="post" action="/report">` with the button "Update report" (or "Make report" when there is none), and beside it a link "Report" with "made <date and time>" when `report/index.html` exists. The pages `build` writes to disk and the blind index have neither.
+
+- [ ] Tests first: the POST writes the page and redirects; the GET serves it and the tables; `/report/../ratings/...`, `/report/other.html` and `/report/` spelled with encoded dots are 404; before any report the GET is 404 and the index says "Make report"; after it the index shows the link and the date; on a blind server, with and without a name, POST and GET are 404, the index has no report form, and no report file is written; the subject links on the served page open the subject pages.
+- [ ] Run, see them fail. Commit tests. Implement. Run all tests. Commit.
+
+### Task 6: Real data, and review
 
 - [ ] Run `surfaceqa report` on `~/surfaceqa-demo` (test reviews by several names) and on `~/surfaceqa-network` (46 subjects; one draft, so the reviewer parts must read "No submitted reviews yet." and the indicator parts must be filled). Open both pages in the browser and check them on screenshots; compare three counts by hand against the subject pages.
-- [ ] README: the command, what each part counts, and that the page is for the person coordinating the review, not for blind reviewers.
+- [ ] In the browser: press "Update report" on the index of both servers and check that the page is made again and opens. README: the command and the button, what each part counts, and that a blind server does not offer the report.
 - [ ] Run all tests. Commit. Final whole-branch review by an independent reviewer, with this plan's Review Focus.
