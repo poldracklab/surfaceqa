@@ -6,7 +6,7 @@ from pathlib import Path
 
 from surfaceqa.build import BuildResult, build_all
 from surfaceqa.discover import find_subjects, source_root
-from surfaceqa.settings import has_placeholder, save_rerun_template
+from surfaceqa.settings import has_placeholder, save_rerun_template, save_sources
 from surfaceqa.site import write_site
 
 USAGE_ERROR = 2
@@ -76,6 +76,7 @@ def _build(args: argparse.Namespace) -> int:
     if not refs:
         return _fail("no subjects found (a subject is a folder containing mri/ and surf/)")
     results = build_all(refs, out, jobs=args.jobs)
+    save_sources(out, sources)
     if args.rerun_template is not None:
         save_rerun_template(out, sorted({ref.source for ref in refs}), args.rerun_template)
     write_site(out)

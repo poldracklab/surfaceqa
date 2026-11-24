@@ -1,12 +1,12 @@
 """Write the report: how errors are spread over the subjects and regions of a QA directory."""
 
 import csv
-import os
 from datetime import datetime
 from pathlib import Path
 from urllib.parse import quote
 
 from surfaceqa import summary
+from surfaceqa.layout import replace_file
 from surfaceqa.checklist import WHAT
 from surfaceqa.consensus import combine
 from surfaceqa.protocol import load_protocol
@@ -81,19 +81,11 @@ def _sections(facts: list[dict]) -> list[dict]:
             for source in sources]
 
 
-def _replace(path: Path, write) -> None:
-    """Write a file whole: a reader never gets a page that is still being written."""
-    partial = path.with_name(f".{path.name}.{os.getpid()}.partial")
-    with open(partial, "w", newline="") as handle:
-        write(handle)
-    os.replace(partial, path)
-
-
 def _write_table(path: Path, header: list[str], rows: list[list]) -> None:
     def write(handle) -> None:
         csv.writer(handle, delimiter="\t", lineterminator="\n").writerows([header, *rows])
 
-    _replace(path, write)
+    replace_file(path, write)
 
 
 def _region_table(sections: list[dict]) -> list[list]:
@@ -133,7 +125,7 @@ def write_report(qa_dir: Path, now: datetime | None = None) -> Path:
         name=qa_dir.name, made=made, overall=summary.progress(facts), sections=sections,
         labels=_labels(), tables=TABLES, steps=STEP, kinds_of_finding=summary.FINDING_KINDS,
         finding_labels=WHAT)
-    _replace(folder / PAGE, lambda handle: handle.write(page))
+    replace_file(folder / PAGE, lambda handle: handle.write(page))
     _write_tables(folder, sections)
     return folder / PAGE
 

@@ -17,7 +17,7 @@ from surfaceqa.contours import SURFACE_ORDER, pack_plane, plane_segments
 from surfaceqa.discover import SubjectRef
 from surfaceqa.fingerprint import surface_fingerprint
 from surfaceqa.geometry import DisplayVolume, load_display_volume, to_grid
-from surfaceqa.layout import current_run_dir, read_json, subject_dir
+from surfaceqa.layout import current_run_dir, read_json, replace_text, subject_dir
 from surfaceqa.pipelines import PipelineInfo, SubjectFiles, detect_pipeline, subject_files
 from surfaceqa.planes import PLANES, Plane
 from surfaceqa.provenance import write_provenance
@@ -40,7 +40,7 @@ class BuildResult:
 
 
 def _write_json(path: Path, payload: dict) -> None:
-    path.write_text(json.dumps(payload, indent=1))
+    replace_text(path, json.dumps(payload, indent=1))
 
 
 def _identity(ref: SubjectRef, pipeline: PipelineInfo) -> dict:

@@ -1,6 +1,7 @@
 """Where things live inside a QA directory."""
 
 import json
+import os
 from pathlib import Path
 
 
@@ -23,6 +24,21 @@ def read_json(path: Path) -> dict | None:
         return json.loads(path.read_text())
     except (OSError, ValueError):
         return None
+
+
+def replace_file(path: Path, write, mode: str = "w") -> None:
+    """Write a file whole: a reader, or a build that is stopped, never leaves half of it."""
+    partial = path.with_name(f".{path.name}.{os.getpid()}.partial")
+    try:
+        with open(partial, mode, **({} if "b" in mode else {"newline": ""})) as handle:
+            write(handle)
+        os.replace(partial, path)
+    finally:
+        partial.unlink(missing_ok=True)
+
+
+def replace_text(path: Path, text: str) -> None:
+    replace_file(path, lambda handle: handle.write(text))
 
 
 def file_signature(root: Path, rels) -> dict[str, list[int]]:
