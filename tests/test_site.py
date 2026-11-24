@@ -680,3 +680,8 @@ def test_a_blind_reviewer_does_not_see_the_edited_flag_before_submitting(qa_revi
     assert "<dt>Edited</dt>" in done and "already been edited" in done
     assert "edited" in _row(_index(qa_reviewed, "dan", blind=True), RECON)
     assert "<dt>Edited</dt>" in _page(qa_reviewed, RECON, "eve")  # not a blind review
+
+
+def test_pages_written_to_disk_do_not_offer_the_report_button(qa_reviewed):
+    write_site(qa_reviewed)
+    assert 'action="/report"' not in (qa_reviewed / "index.html").read_text()
