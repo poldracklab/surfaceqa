@@ -126,3 +126,17 @@ def test_build_refuses_a_rerun_template_without_the_placeholder(synth_sources, t
     code = main(["build", str(synth_sources[0]), "--out", str(out), "--rerun-template", "docker run img"])
     assert code == 2 and "{command}" in capsys.readouterr().err
     assert not out.exists()
+
+
+def test_build_compares_the_subjects_of_a_source_folder(tmp_path, monkeypatch):
+    from surfaceqa.cohort import load_cohort
+    from tests.synth import write_qa_files
+
+    for i in range(3):
+        write_qa_files(write_subject(tmp_path / "fs", name=f"sub-{i:02d}"))
+    qa = tmp_path / "qa"
+    assert main(["build", str(tmp_path / "fs"), "--out", str(qa)]) == 0
+    cohort = load_cohort(qa, "fs")
+    assert cohort.n == 3 and cohort.median is None  # thirty are needed
+    page = (qa / "subjects" / "fs__sub-00" / "index.html").read_text()
+    assert "needs 30 subjects in this source folder; there are 3" in page
