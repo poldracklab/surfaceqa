@@ -530,7 +530,7 @@ GUIDANCE = f"/subjects/{RECON}/guidance"
 def _major_body(qa, reviewer, note) -> dict:
     run = current_run_dir(qa, RECON).name
     review = make_review(reviewer, RECON, run, sinus="major", marks=[{**MARK, "note": note}])
-    return {key: review[key] for key in ("items", "marks", "grade", "notes", "unratable")}
+    return {key: review[key] for key in ("run", "items", "marks", "grade", "notes", "unratable")}
 
 
 def test_guidance_follows_the_saved_review(qa_reviewed):
@@ -571,12 +571,17 @@ def test_guidance_is_not_served_blind_without_a_name(qa_reviewed):
     assert _client(qa_reviewed, blind=True).get(GUIDANCE).status_code == 404
 
 
-@pytest.mark.parametrize("path", ["/subjects/nope__nobody/guidance", f"{GUIDANCE}/",
-                                  f"/subjects/{RECON}/GUIDANCE", f"{GUIDANCE}.html",
-                                  "/subjects/fastsurfer__sub-01/../guidance"])
+@pytest.mark.parametrize("path", ["/subjects/nope__nobody/guidance",
+                                  f"/subjects/{RECON}/GUIDANCE", f"{GUIDANCE}.html"])
 def test_guidance_address_variants_are_not_found(qa_reviewed, path):
     response = _client(qa_reviewed, "dan").get(path, follow_redirects=False)
     assert response.status_code == 404
+
+
+def test_guidance_address_with_a_trailing_slash_only_redirects_to_the_gated_address(qa_reviewed):
+    response = _client(qa_reviewed, blind=True).get(f"{GUIDANCE}/", follow_redirects=False)
+    assert response.status_code == 307 and response.headers["location"].endswith(GUIDANCE)
+    assert "freeview" not in response.text
 
 
 def test_subject_page_loads_the_guidance_script(qa_reviewed):

@@ -1,5 +1,6 @@
 // Recording a review: ratings, marks, grade; saved as the reviewer goes.
 import * as L from "./logic.js";
+import {refreshGuidance} from "./guidance.js";
 
 const SAVE_DELAY = 500; // ms after the last change
 const ZOOM_MM = 60;
@@ -132,6 +133,7 @@ async function saveNow(extra = {}) {
     if (status !== 200) { state.dirty = true; showStatus(`Not saved: ${detailText(result.detail)}`, true); return false; }
     review.saved = result.review.saved;
     showStatus(`Saved ${new Date().toLocaleTimeString([], {hour: "2-digit", minute: "2-digit"})}`);
+    refreshGuidance();
     return true;
   } catch (error) {
     state.dirty = true;

@@ -28,6 +28,14 @@ Safe to rerun: unchanged subjects are skipped, and a subject whose surfaces chan
 run while the old one is kept.
 
 ```
+uv run surfaceqa build /data/derivatives/fastsurfer --out /data/qa \
+    --rerun-template 'docker run --gpus all -v /data:/data deepmi/fastsurfer:latest {command}'
+```
+Optional. Stores the line that launches the pipeline for these source folders, with `{command}`
+where the pipeline's own command goes. Fix guidance then shows rerun commands that can be pasted
+as they are.
+
+```
 uv run surfaceqa serve /data/qa
 uv run surfaceqa serve /data/qa --host 0.0.0.0 --blind
 ```
@@ -100,6 +108,33 @@ A review can still be changed after it is submitted; it is then flagged as revis
 The wording of the rating scales is in `src/surfaceqa/protocol.json`, which has a version
 number that is stored with every review.
 
+## Fix guidance
+
+For every problem marked in a region rated "Major (needs fix)", the subject page shows, under
+the review:
+
+- what to edit, in the order to try it;
+- a `freeview` command that opens the T1, the file to edit and the four surfaces at the mark;
+- the command that reruns the subject, built from the command of its first run (read from its
+  log when the report was built).
+
+While reviewing, the guidance follows your own marks. After `finalize` it comes from the final
+labels, for anyone who may see them. The tool never edits or reruns anything itself. After a
+rerun, run `surfaceqa build` again: the subject gets a new run and needs a new review.
+
+The recipes are in `src/surfaceqa/recipes.json`.
+
+- FastSurfer recipes follow the FastSurfer 2.6 editing documentation.
+- recon-all recipes are for FreeSurfer 8. The FreeSurfer editing tutorials predate version 8;
+  the recipes follow them where the version 8 `recon-all` script behaves the same way. One
+  departure: for a pial surface that is too far out they edit
+  `mri/brain.finalsurfs.manedit.mgz`, not `mri/brainmask.mgz`, because version 8 can rebuild
+  the brainmask on a full rerun.
+- Subjects of another version get the same recipes with a warning.
+
+A subject that shows signs of manual edits (edit files, edit flags or partial reruns in its
+logs) is marked "edited" on the pages and in the `edited` column of the export tables.
+
 ## What is in a QA directory
 
 ```
@@ -108,12 +143,12 @@ subjects/<source>__<name>/    one folder per subject, with one folder per run
 ratings/                      the reviews
 final/                        final labels, written by finalize
 export/                       tables, written by export
+settings.json                 rerun templates given to build
 ```
 
 ## Not built yet
 
-Fix guidance for subjects that need editing, side-by-side comparison of two reconstructions,
-and thickness outliers across the cohort.
+Side-by-side comparison of two reconstructions, and thickness outliers across the cohort.
 
 ## Development
 
