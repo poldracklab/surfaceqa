@@ -126,3 +126,4 @@ body.embedded { margin: 0; padding: 0 0 2px; height: 100vh; display: flex; flex-
 body.embedded .viewer { flex: 1; }
 body.embedded .embedded-title { margin: 2px 4px; font-size: 12px; }
 body.embedded .layouts, body.embedded .keys { display: none; }
+.report { margin: 8px 0; } .report button { margin-left: 6px; }

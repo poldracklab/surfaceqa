@@ -55,6 +55,12 @@ Writes four tab-separated tables to `/data/qa/export/`: `ratings.tsv` (one row p
 reviewer and item), `marks.tsv`, `final.tsv` and `indicators.tsv`. Only submitted reviews are
 exported.
 
+```
+uv run surfaceqa report /data/qa
+```
+Writes `/data/qa/report/index.html`: how the errors are spread over subjects and regions (see
+"The report" below). The same page can be made again from the index page of `surfaceqa serve`.
+
 ## A review session
 
 1. Open the index and type your name in the header (letters, digits, `-` and `_`). The browser
@@ -165,6 +171,29 @@ recomputes the indicators of that folder's subjects. Slices and contours are not
 also happens for the rest of a folder when a build is limited with `--subjects`. A subject whose
 folder was deleted from the source, or whose latest build failed, no longer counts.
 
+## The report
+
+`surfaceqa report`, or the "Update report" button on the index page, makes one page per QA
+directory with a part for each source folder:
+
+- **Progress and grades:** how many subjects are reviewed, in disagreement between reviewers,
+  could not be rated, or are not reviewed; and the final grades.
+- **Ratings by region:** for each checklist item, how many subjects got each final rating.
+- **Marked problems:** regions by kind of problem, as subjects with such a mark (and marks).
+- **Subjects by region:** one row per subject, the most severe first, linked to its page.
+- **Automated indicators:** on how many subjects each indicator ran and what it found, and the
+  findings by region. These are not judgments.
+- **Indicators against reviewers:** per region, how reviewers rated it where an indicator had a
+  finding and where none had; the table for judging the thresholds.
+
+The reviews are combined when the report is made, with the rule of `finalize`; `finalize` need
+not have been run. Only submitted reviews count. The page names no reviewer and shows no notes.
+It is made from the reviews of that moment and does not update by itself. Three tables are
+written beside it (`region_ratings.tsv`, `problem_kinds.tsv`, `indicator_agreement.tsv`).
+
+A server started with `--blind` neither makes nor shows the report, because it gives every
+reviewer's ratings in aggregate; there, use the command.
+
 ## What is in a QA directory
 
 ```
@@ -173,6 +202,7 @@ subjects/<source>__<name>/    one folder per subject, with one folder per run
 ratings/                      the reviews
 final/                        final labels, written by finalize
 export/                       tables, written by export
+report/                       the report page and its tables
 cohort/                       thickness statistics per source folder
 settings.json                 rerun templates given to build
 ```

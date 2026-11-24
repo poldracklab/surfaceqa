@@ -1,0 +1,140 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Report · {{ name }} · surfaceqa</title>
+<style>
+:root {
+  --bg: #111417; --text: #e6e8ea; --muted: #9aa3ab; --line: #2a3037; --link: #7fb7ff;
+  /* one hue, three ordered steps: a rating scale is an order, not three categories */
+  --step0: #184f95; --step1: #3987e5; --step2: #b7d3f6; --neutral: #898781; --heat: 57, 135, 229;
+}
+body { background: var(--bg); color: var(--text); font: 14px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif; margin: 0 auto; padding: 16px 20px 60px; max-width: 1180px; }
+a { color: var(--link); }
+h1 { font-size: 22px; margin: 0 0 4px; }
+h2 { font-size: 18px; margin: 36px 0 4px; padding-top: 14px; border-top: 1px solid var(--line); }
+h3 { font-size: 15px; margin: 24px 0 2px; }
+p { margin: 4px 0 8px; }
+.muted, .what { color: var(--muted); }
+.what { font-size: 13px; max-width: 80ch; }
+.empty { border: 1px dashed var(--line); padding: 10px 12px; color: var(--muted); max-width: 80ch; }
+table { border-collapse: collapse; font-variant-numeric: tabular-nums; }
+th, td { padding: 3px 8px; text-align: right; border-bottom: 1px solid var(--line); }
+th { color: var(--muted); font-weight: 500; font-size: 12px; vertical-align: bottom; }
+th:first-child, td:first-child { text-align: left; }
+td.zero { color: var(--muted); }
+td.heat { background: rgba(var(--heat), var(--a, 0)); }
+.legend { display: flex; flex-wrap: wrap; gap: 4px 16px; font-size: 12px; color: var(--muted); margin: 6px 0; }
+.key { display: inline-block; width: 12px; height: 12px; border-radius: 2px; vertical-align: -2px; margin-right: 5px; box-sizing: border-box; }
+.step0 { background: var(--step0); color: #fff; }
+.step1 { background: var(--step1); color: #fff; }
+.step2 { background: var(--step2); color: #0b0b0b; }
+.disagreement { background: repeating-linear-gradient(45deg, var(--neutral) 0 3px, transparent 3px 6px); color: var(--text); }
+.unreviewed { background: transparent; border: 1px dashed #5b646c; color: var(--muted); }
+.unratable { background: #2a3037; color: var(--muted); }
+.bars { display: grid; grid-template-columns: max-content minmax(160px, 1fr); gap: 5px 12px; align-items: center; max-width: 900px; }
+.bar { display: flex; gap: 2px; height: 20px; }
+.bar span { display: block; min-width: 3px; border-radius: 2px; box-sizing: border-box; font-size: 11px; line-height: 20px; text-align: center; overflow: hidden; white-space: nowrap; }
+.grades { display: flex; align-items: flex-end; gap: 4px; height: 120px; margin: 8px 0 0; border-bottom: 1px solid #383835; max-width: 640px; }
+.grades div { flex: 1; display: flex; flex-direction: column; justify-content: flex-end; align-items: center; height: 100%; font-size: 11px; color: var(--muted); }
+.grades i { display: block; width: 70%; background: var(--step1); border-radius: 4px 4px 0 0; }
+.grades i.other { background: var(--neutral); }
+.gradenames { display: flex; gap: 4px; max-width: 640px; font-size: 11px; color: var(--muted); }
+.gradenames span { flex: 1; text-align: center; }
+.grid td, .grid th { padding: 2px 3px; text-align: center; border-bottom: 0; }
+.grid th.item { height: 120px; white-space: nowrap; vertical-align: bottom; }
+.grid th.item span { display: inline-block; width: 22px; writing-mode: vertical-rl; transform: rotate(180deg); text-align: left; }
+.grid td:first-child, .grid td.info { text-align: left; white-space: nowrap; padding-right: 10px; }
+.cell { display: block; width: 22px; height: 18px; border-radius: 2px; font-size: 11px; line-height: 18px; box-sizing: border-box; }
+.scroll { overflow-x: auto; }
+</style>
+</head>
+<body>
+{% macro n_subjects(n) %}{{ n }} subject{{ "" if n == 1 else "s" }}{% endmacro %}
+{% macro mark(level) %}{{ {"none": "", "ok": "", "minor": "m", "concern": "c", "major": "M", "exclude": "X", "disagreement": "≠", "unreviewed": "", "unratable": "–"}[level] }}{% endmacro %}
+{% macro step(level) %}{{ steps.get(level, level) }}{% endmacro %}
+{% macro heat(n, most) %}{% if n %} class="heat" style="--a: {{ (0.15 + 0.6 * n / most) | round(2) }}"{% else %} class="zero"{% endif %}{% endmacro %}
+<h1>Error distribution · {{ name }}</h1>
+<p class="muted">Made {{ made }} from the submitted reviews and the indicator results as they were then. {{ overall.reviewed + overall.disagreement }} of {{ n_subjects(overall.subjects) }} reviewed{% if overall.unratable %}; {{ overall.unratable }} could not be rated{% endif %}{% if overall.drafts %}; {{ overall.drafts }} draft{{ "" if overall.drafts == 1 else "s" }} not counted{% endif %}.</p>
+<p class="what">Reviewer ratings come first. The automated indicators follow in their own part: they point at places to look and are not judgments. A subject that was not reviewed, or on which an indicator did not run, is shown as such and never as free of errors. Tables: {% for table in tables %}<a href="{{ table }}">{{ table }}</a>{{ ", " if not loop.last }}{% endfor %}.</p>
+{% if sections | length > 1 %}<p>Source folders: {% for s in sections %}<a href="#source-{{ s.source }}">{{ s.source }}</a>{{ " · " if not loop.last }}{% endfor %}</p>{% endif %}
+
+{% for s in sections %}
+{% set p = s.progress %}
+<section id="source-{{ s.source }}">
+<h2>{{ s.source }}</h2>
+<p>{{ p.reviewed + p.disagreement }} of {{ n_subjects(p.subjects) }} reviewed{% if p.disagreement %} ({{ p.disagreement }} with a disagreement between reviewers){% endif %}{% if p.unratable %}; {{ p.unratable }} could not be rated{% endif %}; {{ p.unreviewed }} not reviewed{% if p.drafts %}; {{ p.drafts }} draft{{ "" if p.drafts == 1 else "s" }} not counted{% endif %}.{% if s.unbuilt %} {{ n_subjects(s.unbuilt) }} could not be built and {{ "has" if s.unbuilt == 1 else "have" }} nothing to review.{% endif %}</p>
+
+{% if not s.has_ratings and not p.unratable %}
+<p class="empty">No submitted reviews yet. Nothing is known about the errors in these subjects until someone has reviewed them; the indicator results below only say where to look.</p>
+{% elif not s.has_ratings %}
+<p class="empty">No subject has ratings: every submitted review says its subject could not be rated. The indicator results below only say where to look.</p>
+{% else %}
+<h3>Grades</h3>
+<p class="what">The final grade of each reviewed subject. Reviewers more than one letter apart count as a disagreement.</p>
+<div class="grades" role="img" aria-label="Number of subjects per grade">{% for grade, n in s.grades %}<div title="{{ grade }}: {{ n_subjects(n) }}">{% if n %}{{ n }}<i{% if loop.index > loop.length - 2 %} class="other"{% endif %} style="height: {{ (100 * n / s.most_graded) | round(1) }}%"></i>{% endif %}</div>{% endfor %}</div>
+<div class="gradenames">{% for grade, n in s.grades %}<span>{{ {"disagreement": "≠", "not graded": "none"}.get(grade, grade) }}</span>{% endfor %}</div>
+
+<h3>Ratings by region</h3>
+<p class="what">For each item of the checklist, how many subjects got each final rating. Where two reviewers are one step apart the lower rating counts; two steps apart is a disagreement. Subjects that could not be rated are left out.</p>
+<div class="legend"><span><i class="key step0"></i>None / OK</span><span><i class="key step1"></i>Minor / Concern</span><span><i class="key step2"></i>Major (needs fix) / Consider excluding</span><span><i class="key disagreement"></i>Disagreement</span><span><i class="key unreviewed"></i>Not reviewed</span></div>
+<div class="bars">
+{% for row in s.regions %}<div>{{ row.title }}</div><div class="bar" role="img" aria-label="{{ row.title }}: {% for seg in row.segments %}{{ seg.n }} {{ labels[seg.level] }}{{ ", " if not loop.last }}{% endfor %}">{% for seg in row.segments %}<span class="{{ seg.step }}" style="width: {{ seg.percent }}%" title="{{ labels[seg.level] }}: {{ n_subjects(seg.n) }}">{{ seg.n }}</span>{% endfor %}</div>
+{% endfor %}
+</div>
+
+<h3>Marked problems</h3>
+<p class="what">Subjects in which a reviewer marked at least one problem of that kind in that region, with the number of marks in brackets. Marks of all the reviewers whose review counts are pooled.</p>
+{% set kinds = s.problems[0].cells.keys() | list %}
+<div class="scroll"><table>
+<tr><th>Region</th>{% for kind in kinds %}<th>{{ labels[kind] }}</th>{% endfor %}</tr>
+{% for row in s.problems %}<tr><td>{{ row.title }}</td>{% for kind in kinds %}{% set c = row.cells[kind] %}<td{{ heat(c.subjects, s.most_marked) }}>{{ c.subjects }}{% if c.marks %} <span class="muted">({{ c.marks }})</span>{% endif %}</td>{% endfor %}</tr>
+{% endfor %}
+</table></div>
+
+<h3>Subjects by region</h3>
+<p class="what">One row per subject, those with the most severe ratings first. m: minor, M: major, c: concern, X: consider excluding, ≠: reviewers disagree (on that item, or in every box when they disagree on whether the subject is rateable at all), –: could not be rated; an empty dashed box was not reviewed.</p>
+<div class="scroll"><table class="grid">
+<tr><th>Subject</th><th>Grade</th><th>Marks</th>{% for row in s.regions %}<th class="item"><span>{{ row.title }}</span></th>{% endfor %}</tr>
+{% for row in s.grid %}<tr><td><a href="{{ row.href }}">{{ row.name }}</a>{% if row.edited %} <span class="muted">· edited</span>{% endif %}</td><td class="info">{{ {"disagreement": "≠"}.get(row.grade, row.grade) if row.grade else "" }}</td><td class="info">{{ row.marks if row.marks else "" }}</td>{% for item, level in row.cells.items() %}<td><span class="cell {{ step(level) }}" title="{{ labels[level] }}">{{ mark(level) }}</span></td>{% endfor %}</tr>
+{% endfor %}
+</table></div>
+{% endif %}
+
+<h3>Automated indicators — not judgments</h3>
+<p class="what">What the indicators found, whether or not anyone has reviewed the subject. They rank subjects and point at places to look; a subject without findings is not thereby correct.{% if s.not_computed %} On {{ n_subjects(s.not_computed) }} no indicator ran (they failed, or their input files are missing): {{ "it is" if s.not_computed == 1 else "they are" }} in none of the counts of findings below, since nothing was looked at.{% endif %}</p>
+{% if not s.indicators %}
+<p class="empty">No indicator results for this source folder.</p>
+{% else %}
+<div class="scroll"><table>
+<tr><th>Indicator</th><th>ran on</th><th>did not run on</th><th>subjects with a finding</th><th>findings per subject, median</th><th>largest</th></tr>
+{% for row in s.indicators %}<tr><td><code>{{ row.name }}</code></td><td>{{ row.ran }}</td><td{% if not row.not_run %} class="zero"{% endif %}>{{ row.not_run }}</td><td{% if not row.ran %} class="zero"{% endif %}>{% if row.ran %}{{ row.with_findings }}{% else %}–{% endif %}</td><td>{% if row.ran %}{{ row.median | round(1) }}{% else %}–{% endif %}</td><td>{% if row.ran %}{{ row.largest }}{% else %}–{% endif %}</td></tr>
+{% endfor %}
+</table></div>
+
+<h3>Indicator findings by region</h3>
+<p class="what">Subjects with at least one finding of that kind in that region. Places to look that are not counted in the score are left out.</p>
+<div class="scroll"><table>
+<tr><th>Region</th>{% for kind in kinds_of_finding %}<th>{{ finding_labels[kind] }}</th>{% endfor %}</tr>
+{% for row in s.finding_kinds %}<tr><td>{{ row.title }}</td>{% for kind in kinds_of_finding %}<td{{ heat(row.cells[kind], s.most_found) }}>{{ row.cells[kind] }}</td>{% endfor %}</tr>
+{% endfor %}
+</table></div>
+
+<h3>Indicators against reviewers</h3>
+{% if not s.has_ratings %}
+<p class="empty">No subject has ratings yet, so there is nothing to compare the indicators with.</p>
+{% else %}
+<p class="what">Per region, among the subjects that have both a final rating there and indicator results: how the reviewers rated the region where an indicator had a finding in it, and where none had. Many findings in regions rated None, or many Major ratings without a finding, mean the thresholds need another look.</p>
+<div class="scroll"><table>
+<tr><th rowspan="2">Region</th><th colspan="3">an indicator had a finding</th><th colspan="3">no indicator had a finding</th></tr>
+<tr><th>None</th><th>Minor</th><th>Major</th><th>None</th><th>Minor</th><th>Major</th></tr>
+{% for row in s.agreement %}<tr><td>{{ row.title }}</td>{% for side in (row.fired, row.quiet) %}{% for level in ("none", "minor", "major") %}<td{% if not side[level] %} class="zero"{% endif %}>{{ side[level] }}</td>{% endfor %}{% endfor %}</tr>
+{% endfor %}
+</table></div>
+{% endif %}
+{% endif %}
+</section>
+{% endfor %}
+</body>
+</html>

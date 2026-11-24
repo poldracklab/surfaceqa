@@ -653,3 +653,70 @@ def test_blind_findings_of_an_earlier_run_wait_for_the_review_too(qa_reviewed, t
     assert _client(qa_reviewed, "cat").get(path).status_code == 200
     subject_page = _client(qa_reviewed, "cat").get(f"/subjects/{FIRST}/").text
     assert f'<option value="runs/{old}/viewer.html">' in subject_page and "Earlier runs" in subject_page
+
+
+# ---- the report, made again from the index page ---------------------------------------------
+
+def test_index_offers_to_make_the_report_and_then_links_to_it(qa_reviewed):
+    client = _client(qa_reviewed, "cat")
+    before = client.get("/").text
+    assert '<form method="post" action="/report"' in before and "Make report" in before
+    assert 'href="/report/index.html"' not in before
+    assert client.get("/report/index.html").status_code == 404
+    made = client.post("/report")
+    assert made.status_code == 303 and made.headers["location"] == "/report/index.html"
+    page = client.get("/report/index.html")
+    assert page.status_code == 200 and "Error distribution" in page.text
+    assert page.headers["content-type"].startswith("text/html")
+    after = client.get("/").text
+    assert 'href="/report/index.html"' in after and "Update report" in after and "made 20" in after
+
+
+def test_the_report_is_made_again_with_the_reviews_of_the_moment(qa_reviewed):
+    client = _client(qa_reviewed, "cat")
+    client.post("/report")
+    assert "No submitted reviews yet." in client.get("/report/index.html").text
+    run = current_run_dir(qa_reviewed, RECON).name
+    submit_review(qa_reviewed, make_review("cat", RECON, run))
+    assert "No submitted reviews yet." in client.get("/report/index.html").text  # not until asked
+    client.post("/report")
+    assert "No submitted reviews yet." not in client.get("/report/index.html").text
+
+
+def test_the_report_tables_are_served_and_nothing_else_from_that_folder(qa_reviewed):
+    client = _client(qa_reviewed)
+    client.post("/report")
+    for name in ("region_ratings.tsv", "problem_kinds.tsv", "indicator_agreement.tsv"):
+        response = client.get(f"/report/{name}")
+        assert response.status_code == 200 and response.text.startswith("source\t")
+    (qa_reviewed / "report" / "other.html").write_text("x")
+    for path in ("/report/other.html", "/report/../ratings/x.json", "/report/%2e%2e/final/x.json",
+                 "/report/INDEX.HTML", "/report/sub/index.html"):
+        followed = TestClient(create_app(qa_reviewed), follow_redirects=True).get(path)
+        assert followed.status_code == 404, path
+
+
+def test_subject_links_on_the_served_report_open_the_subject_pages(qa_reviewed):
+    client = _client(qa_reviewed, "cat")
+    client.post("/report")
+    assert f'href="../subjects/{FIRST}/index.html"' in client.get("/report/index.html").text
+    assert client.get(f"/subjects/{FIRST}/index.html").status_code == 200
+
+
+@pytest.mark.parametrize("reviewer", [None, "cat", "ann"])
+def test_a_blind_server_neither_makes_nor_serves_the_report(qa_reviewed, reviewer):
+    from surfaceqa.report import write_report
+
+    blind = _client(qa_reviewed, reviewer, blind=True)
+    assert blind.post("/report").status_code == 404
+    assert not (qa_reviewed / "report").exists()
+    write_report(qa_reviewed)  # the coordinator made one with the command
+    for path in ("/report/index.html", "/report/region_ratings.tsv", "/report/INDEX.HTML",
+                 "/report/%69ndex.html", "/report//index.html"):
+        response = TestClient(create_app(qa_reviewed, blind=True), follow_redirects=True)
+        if reviewer:
+            response.cookies.set("surfaceqa_reviewer", reviewer)
+        got = response.get(path)
+        assert "Error distribution" not in got.text and "source\t" not in got.text, path
+    index = blind.get("/").text
+    assert 'action="/report"' not in index and "/report/index.html" not in index

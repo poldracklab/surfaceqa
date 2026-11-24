@@ -35,7 +35,7 @@ class View:
 
 
 @cache
-def _environment() -> Environment:
+def environment() -> Environment:
     return Environment(loader=PackageLoader("surfaceqa", "web/templates"),
                        autoescape=select_autoescape(["html"]))
 
@@ -154,15 +154,18 @@ def _context(view: View, root: str, here: str) -> dict:
             "reviewing": view.serving and view.reviewer is not None}
 
 
-def render_index(records: list[dict], view: View = View()) -> str:
+def render_index(records: list[dict], view: View = View(), report: dict | None = None) -> str:
+    """`report` is given by the review server when the report may be made from this page:
+    {"made": when it was last made, or None}."""
     name = "name.html" if _needs_name(view) else "index.html"
-    return _environment().get_template(name).render(subjects=records, **_context(view, "", "/"))
+    return environment().get_template(name).render(subjects=records, report=report,
+                                                   **_context(view, "", "/"))
 
 
 def render_subject(record: dict, view: View = View()) -> str:
     name = "subject.html" if record["has_run"] else NO_RUN_TEMPLATE[record["status"]]
     here = f"/subjects/{quote(record['key'])}/"
-    template = _environment().get_template("name.html" if _needs_name(view) else name)
+    template = environment().get_template("name.html" if _needs_name(view) else name)
     run_url = f"runs/{record['run']}/" if record["has_run"] else ""
     return template.render(subject=record, views=VIEW_ORDER, run_url=run_url, embedded=False,
                            **_context(view, "../../", here))
@@ -174,7 +177,7 @@ def render_viewer(record: dict, meta: dict, view: View = View()) -> str:
     `meta` is the run's own: an earlier run may be of another pipeline version than the current one.
     """
     version = f" {meta['version']}" if meta.get("version") else ""
-    return _environment().get_template("viewer.html").render(
+    return environment().get_template("viewer.html").render(
         subject=record, views=VIEW_ORDER, run_url="", embedded=True,
         pipeline_label=f"{meta.get('pipeline', 'unknown')}{version}",
         built=meta.get("built", "")[:10], **_context(view, "../../../../", ""))
@@ -183,7 +186,7 @@ def render_viewer(record: dict, meta: dict, view: View = View()) -> str:
 def render_guidance(record: dict, view: View = View()) -> str:
     """The fix guidance of one subject on its own, for the page to reload after a save."""
     here = f"/subjects/{quote(record['key'])}/"
-    template = _environment().get_template("_guidance.html")
+    template = environment().get_template("_guidance.html")
     return template.render(subject=record, **_context(view, "../../", here))
 
 
