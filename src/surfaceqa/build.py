@@ -12,6 +12,7 @@ from pathlib import Path
 import nibabel as nib
 import numpy as np
 
+from surfaceqa.cohort import Cohort, load_cohort, update_cohorts
 from surfaceqa.contours import SURFACE_ORDER, pack_plane, plane_segments
 from surfaceqa.discover import SubjectRef
 from surfaceqa.fingerprint import surface_fingerprint
@@ -24,15 +25,16 @@ from surfaceqa import qa
 from surfaceqa.qa import write_findings
 from surfaceqa.slices import intensity_window, write_plane_slices
 from surfaceqa.subjectdata import input_signature, load_subject_data
+from surfaceqa.thickness_map import write_thickness_map
 
-BUILD_FORMAT = 3  # raise when the contents of a run folder change, so old runs are re-rendered
+BUILD_FORMAT = 4  # raise when the contents of a run folder change, so old runs are re-rendered
 COLORS = {"lh.pial": "#ffe100", "rh.pial": "#ffe100", "lh.white": "#2b6cff", "rh.white": "#ff3b30"}
 
 
 @dataclass
 class BuildResult:
     key: str
-    status: str  # built, updated (indicators or provenance redone), unchanged, missing, failed
+    status: str  # built, updated (indicators, map or provenance redone), unchanged, missing, failed
     run: str | None = None
     missing: list[str] = field(default_factory=list)
 
@@ -94,28 +96,44 @@ def _run_meta(ref, pipeline, run: str, volume: DisplayVolume, window) -> dict:
         "built": datetime.now(timezone.utc).isoformat(timespec="seconds"),
         "shape": shape, "voxel_sizes": list(volume.voxel_sizes), "window": list(window),
         "grid_to_tkr": np.linalg.inv(volume.tkr_to_grid).tolist(),
+        "grid_to_scanner": volume.grid_to_scanner.tolist(),
         "planes": {name: _plane_meta(plane, shape) for name, plane in PLANES.items()},
         "surfaces": {name: {"color": COLORS[name]} for name in SURFACE_ORDER},
     }
 
 
-def _update_qa(ref: SubjectRef, pipeline: PipelineInfo, run_dir: Path) -> bool:
+def _qa_inputs(ref: SubjectRef, pipeline: PipelineInfo, cohort: Cohort | None) -> dict:
+    """What the findings are made from: the subject's files and the cohort it is compared with."""
+    return {**input_signature(ref.path, pipeline), "cohort": [cohort.signature if cohort else ""]}
+
+
+def _update_qa(ref: SubjectRef, pipeline: PipelineInfo, run_dir: Path,
+               cohort: Cohort | None = None) -> bool:
     """Compute the indicators unless they are up to date; True when they were (re)computed.
 
     A failure is recorded in the run folder and must not lose the viewer. It is retried
-    on the next build, as are findings made from other input files or by older code.
+    on the next build, as are findings made from other input files, from another cohort
+    or by older code.
     """
-    inputs = input_signature(ref.path, pipeline)
+    inputs = _qa_inputs(ref, pipeline, cohort)
     if qa.is_up_to_date(run_dir, inputs):
         return False
     error_file = run_dir / qa.ERROR_FILE
     try:
-        write_findings(load_subject_data(ref.path, pipeline), run_dir, inputs)
+        write_findings(load_subject_data(ref.path, pipeline, cohort), run_dir, inputs)
         error_file.unlink(missing_ok=True)
     except Exception:
         (run_dir / qa.FINDINGS_FILE).unlink(missing_ok=True)  # never leave stale findings
         error_file.write_text(traceback.format_exc())
     return True
+
+
+def _update_map(ref: SubjectRef, run_dir: Path) -> bool:
+    """Sample the thickness for the cohort comparison; a failure must not lose the viewer."""
+    try:
+        return write_thickness_map(ref.path, run_dir)
+    except Exception:
+        return False
 
 
 def _update_provenance(ref: SubjectRef, pipeline: PipelineInfo, run_dir: Path) -> bool:
@@ -144,7 +162,8 @@ def _is_current(run_dir: Path) -> bool:
         return False
 
 
-def build_subject(ref: SubjectRef, qa_dir: Path) -> BuildResult:
+def _prepare_subject(ref: SubjectRef, qa_dir: Path) -> BuildResult:
+    """Everything that depends on the subject alone: the viewer, the thickness map, the provenance."""
     folder = subject_dir(qa_dir, ref.key)
     folder.mkdir(parents=True, exist_ok=True)
     pipeline, files = detect_pipeline(ref.path), subject_files(ref.path)
@@ -155,32 +174,87 @@ def build_subject(ref: SubjectRef, qa_dir: Path) -> BuildResult:
     rendered = _is_current(run_dir)
     if not rendered:
         _render_run(ref, pipeline, files, run, run_dir)
-    recomputed = _update_qa(ref, pipeline, run_dir)
-    recomputed = _update_provenance(ref, pipeline, run_dir) or recomputed
-    status = "built" if not rendered else ("updated" if recomputed else "unchanged")
+    redone = _update_map(ref, run_dir)
+    redone = _update_provenance(ref, pipeline, run_dir) or redone
     _clear_stale(folder)
     _write_json(folder / "current.json", {"run": run})
-    return BuildResult(ref.key, status, run=run)
+    return BuildResult(ref.key, "updated" if rendered and redone else
+                       ("unchanged" if rendered else "built"), run=run)
 
 
-def _safe_build(qa_dir: Path, ref: SubjectRef) -> BuildResult:
+def _run_indicators(ref: SubjectRef, qa_dir: Path, result: BuildResult,
+                    cohort: Cohort | None) -> BuildResult:
+    """The indicators of a prepared subject, compared with `cohort` when there is one."""
+    if result.run is None:
+        return result
+    run_dir = subject_dir(qa_dir, ref.key) / "runs" / result.run
+    recomputed = _update_qa(ref, detect_pipeline(ref.path), run_dir, cohort)
+    if recomputed and result.status == "unchanged":
+        return BuildResult(ref.key, "updated", run=result.run)
+    return result
+
+
+def build_subject(ref: SubjectRef, qa_dir: Path) -> BuildResult:
+    """Build one subject, compared with the cohort statistics already stored (if any)."""
+    result = _prepare_subject(ref, qa_dir)
+    return _run_indicators(ref, qa_dir, result, load_cohort(qa_dir, ref.source))
+
+
+def _failed(qa_dir: Path, ref: SubjectRef) -> BuildResult:
+    folder = subject_dir(qa_dir, ref.key)
+    folder.mkdir(parents=True, exist_ok=True)
+    _clear_stale(folder)
+    (folder / "error.txt").write_text(traceback.format_exc())
+    return BuildResult(ref.key, "failed")
+
+
+def _safe_prepare(qa_dir: Path, ref: SubjectRef) -> BuildResult:
     try:
-        return build_subject(ref, qa_dir)
+        return _prepare_subject(ref, qa_dir)
     except Exception:
-        folder = subject_dir(qa_dir, ref.key)
-        folder.mkdir(parents=True, exist_ok=True)
-        _clear_stale(folder)
-        (folder / "error.txt").write_text(traceback.format_exc())
-        return BuildResult(ref.key, "failed")
+        return _failed(qa_dir, ref)
+
+
+def _safe_indicators(qa_dir: Path, compare: bool, job: tuple[SubjectRef, BuildResult]) -> BuildResult:
+    ref, result = job
+    try:
+        cohort = load_cohort(qa_dir, ref.source) if compare else None
+        return _run_indicators(ref, qa_dir, result, cohort)
+    except Exception:
+        return _failed(qa_dir, ref)
+
+
+def _safe_cohorts(qa_dir: Path) -> bool:
+    """Bring the cohort statistics up to date; False (and a note) when that failed."""
+    error_file = qa_dir / "cohort" / "error.txt"
+    try:
+        update_cohorts(qa_dir)
+        error_file.unlink(missing_ok=True)
+        return True
+    except Exception:
+        error_file.parent.mkdir(parents=True, exist_ok=True)
+        error_file.write_text(traceback.format_exc())
+        return False
+
+
+def _each(function, items: list, pool: ProcessPoolExecutor | None) -> list:
+    return [function(item) for item in items] if pool is None else list(pool.map(function, items))
+
+
+def _build_passes(refs: list[SubjectRef], qa_dir: Path, pool: ProcessPoolExecutor | None) -> list[BuildResult]:
+    """Each subject on its own, then the cohort statistics, then the indicators that use them."""
+    prepared = _each(partial(_safe_prepare, qa_dir), refs, pool)
+    compare = _safe_cohorts(qa_dir)
+    return _each(partial(_safe_indicators, qa_dir, compare), list(zip(refs, prepared)), pool)
 
 
 def build_all(refs: list[SubjectRef], qa_dir: Path, jobs: int = 1) -> list[BuildResult]:
     """Build every subject; results come back in the order of refs."""
-    build = partial(_safe_build, Path(qa_dir))
+    qa_dir = Path(qa_dir)
     if jobs <= 1:
-        return [build(ref) for ref in refs]
+        return _build_passes(refs, qa_dir, None)
     with ProcessPoolExecutor(max_workers=jobs) as pool:
-        return list(pool.map(build, refs))
+        return _build_passes(refs, qa_dir, pool)
 
 
 def load_meta(qa_dir: Path, key: str) -> dict | None:

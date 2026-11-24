@@ -10,7 +10,7 @@ from surfaceqa.indicators_volume import IndicatorResult, not_run
 from surfaceqa.subjectdata import HemiSurface, SubjectData
 
 
-def _vertex_finding(name: str, kind: str, hemi: str, positions: np.ndarray) -> Finding:
+def vertex_finding(name: str, kind: str, hemi: str, positions: np.ndarray) -> Finding:
     """A finding for a group of vertices, located at the vertex nearest the group's middle."""
     middle = positions.mean(axis=0)
     nearest = positions[np.argmin(np.linalg.norm(positions - middle, axis=1))]
@@ -19,20 +19,20 @@ def _vertex_finding(name: str, kind: str, hemi: str, positions: np.ndarray) -> F
     return Finding(name, kind, grid, None, len(positions), hemi=hemi, voxels=voxels)
 
 
-def _capped(name: str, kind: str, findings: list[Finding], reason: str = "") -> IndicatorResult:
+def capped(name: str, kind: str, findings: list[Finding], reason: str = "") -> IndicatorResult:
     findings = sorted(findings, key=lambda f: -f.n)
     limit = thresholds.MAX_FINDINGS_PER_INDICATOR
     return IndicatorResult(name, kind, reason=reason, findings=findings[:limit],
                            dropped=max(len(findings) - limit, 0))
 
 
-def _unchecked(data: SubjectData, usable: dict, why: str) -> str:
+def unchecked(data: SubjectData, usable: dict, why: str) -> str:
     """Says which hemispheres were left out, so a partial run is not read as a full one."""
     skipped = [hemi for hemi in data.hemis if hemi not in usable]
     return f"{', '.join(skipped)} not checked: {why}" if skipped else ""
 
 
-def _connected_groups(selected: np.ndarray, faces: np.ndarray) -> list[np.ndarray]:
+def connected_groups(selected: np.ndarray, faces: np.ndarray) -> list[np.ndarray]:
     """Groups of selected vertices joined by mesh edges."""
     edges = np.concatenate([faces[:, [0, 1]], faces[:, [1, 2]], faces[:, [2, 0]]])
     edges = edges[selected[edges].all(axis=1)]
@@ -53,8 +53,8 @@ def _thick_vertices(surface: HemiSurface) -> np.ndarray:
 
 
 def _hemi_thick_patches(name: str, hemi: str, surface: HemiSurface) -> list[Finding]:
-    groups = _connected_groups(_thick_vertices(surface), surface.faces)
-    return [_vertex_finding(name, "thickness", hemi, surface.pial_grid[group])
+    groups = connected_groups(_thick_vertices(surface), surface.faces)
+    return [vertex_finding(name, "thickness", hemi, surface.pial_grid[group])
             for group in groups if len(group) >= thresholds.MIN_THICK_VERTICES]
 
 
@@ -65,7 +65,7 @@ def thick_patches(data: SubjectData) -> IndicatorResult:
     if not usable:
         return not_run(name, kind, "no thickness files")
     findings = [f for hemi, s in usable.items() for f in _hemi_thick_patches(name, hemi, s)]
-    return _capped(name, kind, findings, _unchecked(data, usable, "no thickness file"))
+    return capped(name, kind, findings, unchecked(data, usable, "no thickness file"))
 
 
 def _has_defect_data(surface: HemiSurface) -> bool:
@@ -76,7 +76,7 @@ def _has_defect_data(surface: HemiSurface) -> bool:
 def _hemi_defects(name: str, hemi: str, surface: HemiSurface) -> list[Finding]:
     labels = np.rint(surface.defect_labels).astype(int)
     ids, counts = np.unique(labels[labels > 0], return_counts=True)
-    return [_vertex_finding(name, "topology", hemi, surface.nofix_grid[labels == i])
+    return [vertex_finding(name, "topology", hemi, surface.nofix_grid[labels == i])
             for i, count in zip(ids, counts) if count >= thresholds.MIN_DEFECT_VERTICES]
 
 
@@ -86,7 +86,7 @@ def topology_defects(data: SubjectData) -> IndicatorResult:
     if not usable:
         return not_run(name, kind, "no defect labels with a matching pre-fix surface (orig.nofix)")
     findings = [f for hemi, s in usable.items() for f in _hemi_defects(name, hemi, s)]
-    return _capped(name, kind, findings, _unchecked(data, usable, "no defect labels with a matching pre-fix surface"))
+    return capped(name, kind, findings, unchecked(data, usable, "no defect labels with a matching pre-fix surface"))
 
 
 SURFACE_INDICATORS = (thick_patches, topology_defects)

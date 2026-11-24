@@ -1,0 +1,45 @@
+<section class="viewer" id="viewer"{% if subject.hide_indicators %} data-findings="off"{% endif %} data-run="{{ run_url }}" data-meta="{{ run_url }}meta.json">
+<div class="toolbar">
+<label><input type="checkbox" id="show-surfaces" checked> Surfaces</label>
+<label><input type="checkbox" id="show-pial" checked> pial</label>
+<label><input type="checkbox" id="show-white" checked> white</label>
+{% if not subject.hide_indicators %}<label><input type="checkbox" id="show-findings" checked> Findings</label>{% endif %}
+<button type="button" id="reset-view">Reset view</button>
+{% if subject.compare and not embedded %}
+<select id="compare-with" aria-label="Compare with another reconstruction">
+<option value="">Compare with…</option>
+{% for group, title in [("other", "Same subject, other reconstruction"), ("previous", "Earlier runs")] %}
+{% set options = subject.compare | selectattr("group", "equalto", group) | list %}
+{% if options %}<optgroup label="{{ title }}">
+{% for c in options %}<option value="{{ c.href }}">{{ c.label }}</option>
+{% endfor %}</optgroup>{% endif %}
+{% endfor %}
+</select>
+<label><input type="checkbox" id="compare-linked" checked> Linked</label>
+{% endif %}
+<span class="layouts" role="group" aria-label="Views shown">
+<button type="button" class="layout active" data-layout="three">Three views</button>
+<button type="button" class="layout" data-layout="coronal">Coronal</button>
+<button type="button" class="layout" data-layout="sagittal">Sagittal</button>
+<button type="button" class="layout" data-layout="axial">Axial</button>
+</span>
+<span class="legend"><i class="swatch pial"></i>pial <i class="swatch lh"></i>left white <i class="swatch rh"></i>right white</span>
+</div>
+<div class="panels">
+{% for plane in views %}
+<div class="panel" data-plane="{{ plane }}">
+<canvas></canvas>
+<span class="edge left"></span><span class="edge right"></span><span class="edge top"></span><span class="edge bottom"></span>
+<div class="readout"></div>
+<input type="range" class="slider" min="0" max="0" value="0" step="1" aria-label="{{ plane }} slice">
+</div>
+{% endfor %}
+</div>
+<p class="keys">scroll or arrow keys: change slice · click: move the other two views · ctrl/cmd + scroll: zoom · drag: pan · double-click a view: enlarge / restore · hold s: hide surfaces · n / p: next / previous location{% if reviewing and not embedded %} · 1 2 3: rate · j / k: next / previous item · m: mark a problem · ?: all keys{% endif %}</p>
+{% if subject.compare and not embedded %}
+<div id="compare" hidden>
+<iframe title="Comparison"></iframe>
+<p class="note">The two are kept at the same scanner position. Reconstructions made from different scans do not line up; untick "Linked" to move them separately. The comparison is for looking only: rate and mark in the viewer above.</p>
+</div>
+{% endif %}
+</section>

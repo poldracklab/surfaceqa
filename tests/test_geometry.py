@@ -51,3 +51,28 @@ def test_surface_sits_on_sphere_edge_in_grid(synth_subject):
     outside = vol.data[tuple(np.round(to_grid(verts * 1.1, vol.tkr_to_grid)).astype(int).T)]
     assert (inside > 0).all()
     assert (outside == 0).all()
+
+
+def test_grid_to_scanner_agrees_with_the_image_affine(tmp_path):
+    subj = write_subject(tmp_path / "s", orientation="PIR", voxel=(1.0, 0.7, 1.3),
+                         cras=(3.0, -2.0, 5.0))
+    path = subj / "mri" / "orig.mgz"
+    img = nib.load(path)
+    # every voxel gets its own value, so one can be found again in the reordered display data
+    numbered = np.arange(np.prod(img.shape), dtype=np.float32).reshape(img.shape)
+    nib.save(nib.MGHImage(numbered, img.affine), path)
+    vol = load_display_volume(path)
+    file_index = np.array([5, 9, 13])
+    value = np.asarray(nib.load(path).dataobj)[tuple(file_index)]
+    grid_index = np.argwhere(vol.data == value)[0]
+    expected = img.affine @ np.append(file_index, 1.0)
+    assert np.allclose(vol.grid_to_scanner @ np.append(grid_index, 1.0), expected, atol=1e-4)
+
+
+def test_scanner_and_surface_coordinates_differ_by_cras(tmp_path):
+    # true for the conformed (LIA) volumes FreeSurfer makes; tkr is defined from the grid alone
+    subj = write_subject(tmp_path / "s", cras=(3.0, -2.0, 5.0))
+    vol = load_display_volume(subj / "mri" / "orig.mgz")
+    grid_to_tkr = np.linalg.inv(vol.tkr_to_grid)
+    assert np.allclose(vol.grid_to_scanner[:3, :3], grid_to_tkr[:3, :3])
+    assert np.allclose(vol.grid_to_scanner[:3, 3] - grid_to_tkr[:3, 3], [3.0, -2.0, 5.0], atol=1e-4)

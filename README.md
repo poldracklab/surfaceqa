@@ -135,6 +135,33 @@ The recipes are in `src/surfaceqa/recipes.json`.
 A subject that shows signs of manual edits (edit files, edit flags or partial reruns in its
 logs) is marked "edited" on the pages and in the `edited` column of the export tables.
 
+## Comparing two reconstructions
+
+When the same person was reconstructed more than once (another pipeline or version in another
+source folder, another session in the same folder, or an earlier run of a subject that was
+edited and rerun), the viewer's toolbar has a "Compare with…" menu. The chosen reconstruction
+is shown under the subject's three views, or beside it when one view is shown.
+
+- The two are kept at the same scanner position. Zoom is separate.
+- Untick "Linked" to move them separately. Reconstructions made from different scans do not
+  line up.
+- The comparison is for looking only. Ratings and marks are made in the subject's own viewer.
+- Subjects are matched by name: `sub-07`, `subj07` and `sub-07_ses-nsdanat` are the same person.
+
+## Thickness compared across subjects
+
+Once a source folder has 30 subjects, `build` also compares each subject's cortical thickness,
+place by place, with the other subjects of that folder (using each subject's `surf/?h.sphere.reg`;
+no fsaverage folder is needed). A patch that is much thicker than in the other subjects is listed
+as a finding, "thicker than the cohort": often a place where the pial surface took in sinus or
+dura. Below 30 subjects the subject page says that this indicator did not run.
+
+Adding or rebuilding a subject changes the comparison for the whole folder, so the next `build`
+recomputes the indicators of that folder's subjects. Slices and contours are not redone. A build
+limited with `--subjects` updates only the subjects it names; the others catch up on the next
+full build. A subject whose folder was deleted from the source, or whose latest build failed,
+no longer counts.
+
 ## What is in a QA directory
 
 ```
@@ -143,12 +170,9 @@ subjects/<source>__<name>/    one folder per subject, with one folder per run
 ratings/                      the reviews
 final/                        final labels, written by finalize
 export/                       tables, written by export
+cohort/                       thickness statistics per source folder
 settings.json                 rerun templates given to build
 ```
-
-## Not built yet
-
-Side-by-side comparison of two reconstructions, and thickness outliers across the cohort.
 
 ## Development
 

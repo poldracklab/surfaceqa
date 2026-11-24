@@ -186,11 +186,13 @@ async function skip() {
 
 // ---- rating ----
 
-function setCurrent(index) {
+// Make a checklist item the current one. The keyboard scrolls it into view; a mouse press does
+// not, because scrolling a tall section moves the button under the cursor before the click lands.
+function setCurrent(index, {scroll = true} = {}) {
   if (index === null) return;
   state.current = index;
   itemEls.forEach((el, i) => el.classList.toggle("current", i === index));
-  itemEls[index].scrollIntoView({block: "nearest"});
+  if (scroll) itemEls[index].scrollIntoView({block: "nearest"});
 }
 
 function rate(index, level) {
@@ -202,7 +204,7 @@ function rate(index, level) {
 
 function bindItems() {
   itemEls.forEach((el, index) => {
-    el.addEventListener("pointerdown", () => setCurrent(index));
+    el.addEventListener("pointerdown", () => setCurrent(index, {scroll: false}));
     for (const radio of el.querySelectorAll('input[type="radio"]')) radio.addEventListener("change", () => rate(index, radio.value));
     const note = el.querySelector(".item-note");
     note.addEventListener("input", () => { review.items[el.dataset.item].note = note.value; changed(); });

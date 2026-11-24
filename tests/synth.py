@@ -187,30 +187,50 @@ def _save_like(img, data: np.ndarray, path: Path) -> None:
     nib.save(nib.MGHImage(data, img.affine), path)
 
 
-def _write_label(path: Path, vertices: np.ndarray) -> None:
-    lines = ["#!ascii label, from subject synth", str(len(vertices))]
-    lines += [f"{i} {x:.3f} {y:.3f} {z:.3f} 0.0" for i, (x, y, z) in enumerate(vertices)]
+def _write_label(path: Path, vertices: np.ndarray, members=None) -> None:
+    members = range(len(vertices)) if members is None else members
+    lines = ["#!ascii label, from subject synth", str(len(members))]
+    lines += ["{} {:.3f} {:.3f} {:.3f} 0.0".format(i, *vertices[i]) for i in members]
     path.write_text("\n".join(lines) + "\n")
 
 
-def _write_surface_measures(subj: Path, plant: dict) -> None:
+def _near(verts: np.ndarray, planted, hemi: str) -> np.ndarray:
+    """Which vertices a planted (hemi, centre, radius, ...) entry covers."""
+    if not planted or planted[0] != hemi:
+        return np.zeros(len(verts), dtype=bool)
+    return np.linalg.norm(verts - np.asarray(planted[1]), axis=1) <= planted[2]
+
+
+def _write_sphere_reg(subj: Path, hemi: str, verts: np.ndarray, faces: np.ndarray) -> None:
+    """The ball's own shape, blown up to radius 100: every synthetic subject is registered."""
+    centred = verts - verts.mean(axis=0)
+    sphere = centred / np.linalg.norm(centred, axis=1, keepdims=True) * 100.0
+    nib.freesurfer.write_geometry(subj / "surf" / f"{hemi}.sphere.reg", sphere, faces)
+
+
+def _write_surface_measures(subj: Path, plant: dict, sphere_reg: bool) -> None:
     (subj / "label").mkdir(exist_ok=True)
     for hemi in ("lh", "rh"):
-        verts, _ = nib.freesurfer.read_geometry(subj / "surf" / f"{hemi}.pial")
-        thickness = np.full(len(verts), 2.0, dtype=np.float32)
+        verts, faces = nib.freesurfer.read_geometry(subj / "surf" / f"{hemi}.pial")
+        thickness = np.full(len(verts), plant.get("thickness", 2.0), dtype=np.float32)
         patch = plant.get("thick_patch")
-        if patch and patch[0] == hemi:
-            thickness[np.linalg.norm(verts - np.asarray(patch[1]), axis=1) <= patch[2]] = 5.0
+        thickness[_near(verts, patch, hemi)] = patch[3] if patch and len(patch) > 3 else 5.0
         nib.freesurfer.write_morph_data(subj / "surf" / f"{hemi}.thickness", thickness)
-        _write_label(subj / "label" / f"{hemi}.cortex.label", verts)
+        in_cortex = np.flatnonzero(~_near(verts, plant.get("not_cortex"), hemi))
+        _write_label(subj / "label" / f"{hemi}.cortex.label", verts, in_cortex)
+        if sphere_reg:
+            _write_sphere_reg(subj, hemi, verts, faces)
 
 
-def write_qa_files(subj: Path, pipeline: str = "fastsurfer", plant: dict | None = None) -> None:
+def write_qa_files(subj: Path, pipeline: str = "fastsurfer", plant: dict | None = None,
+                   sphere_reg: bool = True) -> None:
     """Ribbon, segmentation, parcellation, norm, thickness and cortex labels for the synthetic ball.
 
     plant: {"ribbon_blob": (centre tkr mm, radius mm)} adds cortex to the ribbon that the
     segmentation does not have; {"thick_patch": (hemi, centre tkr mm, radius mm)} sets
-    thickness 5.0 on the pial vertices within the radius.
+    thickness 5.0 (or a fourth entry) on the pial vertices within the radius; {"thickness": mm}
+    sets it everywhere else; {"not_cortex": (hemi, centre, radius)} leaves vertices out of the
+    cortex label. `sphere_reg` writes the registration spheres.
     """
     plant = plant or {}
     mri = subj / "mri"
@@ -230,4 +250,4 @@ def write_qa_files(subj: Path, pipeline: str = "fastsurfer", plant: dict | None 
     _save_like(img, parcels, mri / "aparc.DKTatlas+aseg.mgz")
     norm = np.select([np.isin(parcels, (2, 41)), parcels > 0], [110, 70], 0).astype(np.uint8)
     _save_like(img, norm, mri / "norm.mgz")
-    _write_surface_measures(subj, plant)
+    _write_surface_measures(subj, plant, sphere_reg)

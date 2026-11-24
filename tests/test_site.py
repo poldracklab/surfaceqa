@@ -137,7 +137,7 @@ def test_subject_whose_indicators_failed_says_so(qa_planted):
 
 def test_index_says_how_many_indicators_did_not_run(qa_planted):
     html = (qa_planted / "index.html").read_text()
-    assert html.count("2 of 9 not run") == 3
+    assert html.count("3 of 10 not run") == 3
 
 
 def test_subject_with_no_indicator_run_is_not_ranked_as_zero(qa):
@@ -615,3 +615,36 @@ def test_edited_subject_is_flagged_with_the_evidence(qa_reviewed, tmp_path):
 def test_subject_without_a_run_has_no_guidance(qa):
     page = (qa / "subjects" / "fastsurfer__sub-02" / "index.html").read_text()
     assert RECIPE not in page
+
+
+# ---- comparing two reconstructions --------------------------------------------------------
+
+def test_every_run_gets_a_viewer_page_with_the_viewer_and_nothing_else(qa):
+    key = "fastsurfer__sub-01"
+    run = json.loads((qa / "subjects" / key / "current.json").read_text())["run"]
+    page = (qa / "subjects" / key / "runs" / run / "viewer.html").read_text()
+    assert page.count("<canvas") == 3 and 'data-meta="meta.json"' in page and 'data-run=""' in page
+    assert "../../../../static/viewer.js" in page and "../../../../static/link.js" in page
+    assert "sub-01" in page and "fastsurfer 2.6.1" in page
+    for absent in ("checklist", "review-data", "guidance", "compare-with", "Not yet reviewed",
+                   "reviewer", "<header"):
+        assert absent not in page, absent
+
+
+def test_subject_page_offers_the_other_reconstruction(qa):
+    page = (qa / "subjects" / "fastsurfer__sub-01" / "index.html").read_text()
+    other = json.loads((qa / "subjects" / "freesurfer-8.2.0__sub-01" / "current.json").read_text())["run"]
+    assert '<select id="compare-with"' in page and 'id="compare-linked"' in page
+    assert f'<option value="../freesurfer-8.2.0__sub-01/runs/{other}/viewer.html">' in page
+    assert 'label="Same subject, other reconstruction"' in page and "Earlier runs" not in page
+    assert '<div id="compare" hidden>' in page and "<iframe" in page
+    assert "static/link.js" in page
+
+
+def test_subject_page_without_candidates_has_no_comparison(tmp_path):
+    write_subject(tmp_path / "fs", pipeline="freesurfer")
+    qa = tmp_path / "qa"
+    build_all(find_subjects([tmp_path / "fs"]), qa)
+    write_site(qa)
+    page = (qa / "subjects" / "fs__sub-01" / "index.html").read_text()
+    assert "compare-with" not in page and "<iframe" not in page and page.count("<canvas") == 3

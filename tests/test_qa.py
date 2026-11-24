@@ -110,3 +110,29 @@ def test_other_kinds_are_left_alone_by_relabelling():
     f = Finding("ribbon_outside_brain", "pial_out", (1, 2, 3), 79.0, 79, region="sinus")
     relabel_by_region([f])
     assert f.kind == "pial_out"
+
+
+def test_cohort_indicator_is_listed_as_off_without_a_cohort(tmp_path):
+    subj = write_subject(tmp_path / "fastsurfer", shape=(64, 64, 64))
+    write_qa_files(subj)
+    data = load_subject_data(subj, detect_pipeline(subj))
+    found = write_findings(data, tmp_path)
+    (listed,) = [i for i in found["indicators"] if i["name"] == "cohort_thickness"]
+    assert listed["status"] == "not run" and "there are 0" in listed["reason"]
+
+
+def test_cohort_finding_is_written_with_a_region(tmp_path, monkeypatch):
+    import numpy as np
+    from surfaceqa.cohort import Cohort
+
+    monkeypatch.setattr("surfaceqa.thresholds.MIN_COHORT_VERTICES", 20)
+    subj = write_subject(tmp_path / "fastsurfer", shape=(64, 64, 64))
+    write_qa_files(subj, plant={"thick_patch": ("lh", (0.0, 0.0, 10.0), 6.0, 4.0)})
+    flat = {h: np.full(40962, 2.0, dtype=np.float32) for h in ("lh", "rh")}
+    cohort = Cohort("fastsurfer", 30, "sig", flat, {h: v * 0.05 for h, v in flat.items()})
+    data = load_subject_data(subj, detect_pipeline(subj), cohort=cohort)
+    found = write_findings(data, tmp_path)
+    (finding,) = [f for f in found["findings"] if f["indicator"] == "cohort_thickness"]
+    assert finding["region"] and finding["hemi"] == "lh" and finding["kind"] == "thickness"
+    assert found["qa_version"] == 9
+    assert found["thresholds"]["MIN_COHORT"] == 30

@@ -1,0 +1,15 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{{ subject.name }} · {{ subject.source }} · surfaceqa</title>
+<link rel="stylesheet" href="{{ root }}static/app.css">
+</head>
+<body class="embedded">
+<p class="embedded-title"><strong>{{ subject.name }}</strong> · {{ subject.source }} · {{ pipeline_label }} · built {{ built }}</p>
+{% include "_viewer.html" %}
+<script type="module" src="{{ root }}static/viewer.js"></script>
+<script type="module" src="{{ root }}static/link.js"></script>
+</body>
+</html>

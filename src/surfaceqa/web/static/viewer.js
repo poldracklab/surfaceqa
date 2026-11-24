@@ -228,10 +228,23 @@ function drawAll() {
   Object.values(state.views).forEach(draw);
 }
 
-function step(v, amount) {
-  const axis = v.plane.axis;
-  state.cursor[axis] = L.clampSlice(state.cursor[axis] + amount, v.plane.n_slices);
+// Tell the rest of the page (the link to a comparison) that the viewer changed.
+function announce(what) {
+  root.dispatchEvent(new CustomEvent(`surfaceqa:${what}`));
+}
+
+// Every move of the cursor goes through here. A quiet move is one that came from the
+// comparison, which must not be sent back to it.
+function setCursor(grid, {quiet = false} = {}) {
+  state.cursor = grid.map((value, axis) => L.clampSlice(value, state.meta.shape[axis]));
   drawAll();
+  if (!quiet) announce("cursor");
+}
+
+function step(v, amount) {
+  const grid = [...state.cursor];
+  grid[v.plane.axis] += amount;
+  setCursor(grid);
 }
 
 function pointerPosition(v, event) {
@@ -279,8 +292,7 @@ function onPointerUp(v, event) {
   const [x, y] = fromCanvas(v, ...pointerPosition(v, event));
   if (x < -0.5 || y < -0.5 || x > v.plane.width - 0.5 || y > v.plane.height - 0.5) return;
   if (state.pick) return finishPick(pickedPoint(v, x, y));
-  state.cursor = L.screenToGrid(x, y, state.cursor[v.plane.axis], v.plane, state.meta.shape);
-  drawAll();
+  setCursor(L.screenToGrid(x, y, state.cursor[v.plane.axis], v.plane, state.meta.shape));
 }
 
 // The contours drawn on the current slice of a view, by surface.
@@ -325,7 +337,7 @@ function setMarks(marks) {
 
 // Show all three views ("three") or one large view of a single plane.
 // With `fit`, the views start again fitted to the brain, or to the whole image.
-function setLayout(layout, {fit = false, wholeImage = false} = {}) {
+function setLayout(layout, {fit = false, wholeImage = false, quiet = false} = {}) {
   const visible = L.visiblePlanes(layout);
   const single = visible.length === 1;
   state.layout = single ? visible[0] : "three";
@@ -342,7 +354,9 @@ function setLayout(layout, {fit = false, wholeImage = false} = {}) {
     button.classList.toggle("active", button.dataset.layout === state.layout);
   }
   if (single) state.hovered = visible[0];
+  root.classList.toggle("single", single);
   if (fit) requestAnimationFrame(refitVisible); // the panel may not change size, so no resize event
+  if (!quiet) announce("layout");
 }
 
 function refitVisible() {
@@ -413,11 +427,10 @@ function bindToolbar() {
     button.addEventListener("click", () => setLayout(button.dataset.layout));
   }
   document.getElementById("reset-view").addEventListener("click", () => {
-    state.cursor = L.initialCursor(state.meta.shape);
     state.focusMm = null;
     state.wholeImage = false;
     Object.values(state.views).forEach(refit);
-    drawAll();
+    setCursor(L.initialCursor(state.meta.shape));
   });
 }
 
@@ -462,12 +475,14 @@ function focus(v, zoomMm) {
   else v.size = [0, 0];
 }
 
-function goTo(grid, {zoomMm} = {}) {
+// Move to a voxel. A quiet move (from the comparison) keeps the zoom and the page where they are.
+function goTo(grid, {zoomMm, quiet = false} = {}) {
+  if (quiet) return setCursor(grid, {quiet});
   state.cursor = grid.map((value, axis) => L.clampSlice(value, state.meta.shape[axis]));
   state.focusMm = zoomMm || null;
   if (zoomMm) Object.values(state.views).forEach((v) => focus(v, zoomMm));
-  drawAll();
-  root.closest(".workspace").scrollIntoView({block: "nearest"});
+  setCursor(state.cursor);
+  root.closest(".workspace")?.scrollIntoView({block: "nearest"});
 }
 
 function goToSlice(planeName, slice) {
@@ -517,5 +532,8 @@ async function start() {
 }
 
 const ready = start();
-window.surfaceqaViewer = {ready, goTo, goToSlice, setHighlight, setLayout, setSurfaces, setMarks, pick};
+window.surfaceqaViewer = {
+  ready, goTo, goToSlice, setHighlight, setLayout, setSurfaces, setMarks, pick,
+  cursor: () => [...state.cursor], layout: () => state.layout,
+};
 ready.catch(showError);
