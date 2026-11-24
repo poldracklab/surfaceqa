@@ -143,3 +143,11 @@ def test_edit_evidence_is_passed_on():
 def test_without_a_recorded_path_a_placeholder_folder_is_used(path):
     out = build_guidance(meta(path=path), prov(FASTSURFER_COMMAND), [mark()], None)
     assert "<subject folder>/mri/orig.mgz" in out["problems"][0]["steps"][0]["freeview"]
+
+
+def test_rerun_uses_the_options_of_every_first_run_stage():
+    stages = ["recon-all -s sub-01 -i a.nii.gz -autorecon1 -3T", "recon-all -s sub-01 -autorecon3 -T2pial"]
+    provenance = {**prov(stages[0]), "stages": stages}
+    out = build_guidance(meta("freesurfer", "8.2.0"), provenance, [mark()], None)
+    commands = [step["rerun"]["command"] for problem in out["problems"] for step in problem["steps"]]
+    assert commands and all(command.endswith("-3T -T2pial") for command in commands)

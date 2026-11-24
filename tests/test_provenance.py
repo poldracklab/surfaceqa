@@ -89,3 +89,47 @@ def test_a_failure_here_keeps_the_viewer(tmp_path, monkeypatch):
     res = build_subject(ref, tmp_path / "qa")
     assert res.status == "built" and load_meta(tmp_path / "qa", ref.key) is not None
     assert load_provenance(tmp_path / "qa", ref.key) is None
+
+
+# ---- "edited" can be unknown ----------------------------------------------------------------
+
+def _provenance(tmp_path, spoil=None, pipeline="freesurfer"):
+    from surfaceqa.discover import find_subjects
+    from surfaceqa.pipelines import detect_pipeline
+    from surfaceqa.provenance import write_provenance
+    from tests.synth import write_subject
+
+    subj = write_subject(tmp_path / "fs", pipeline=pipeline)
+    if spoil:
+        spoil(subj)
+    (tmp_path / "run").mkdir()
+    write_provenance(find_subjects([subj])[0], detect_pipeline(subj), tmp_path / "run")
+    import json
+    return json.loads((tmp_path / "run" / "provenance.json").read_text())
+
+
+def test_a_volume_that_cannot_be_read_makes_edited_unknown_not_yes(tmp_path):
+    record = _provenance(tmp_path, lambda subj: (subj / "mri" / "wm.mgz").write_bytes(b"junk"))
+    assert record["edited"] is None
+    assert record["evidence"] == ["mri/wm.mgz could not be read, so it was not checked for edits"]
+
+
+def test_real_evidence_wins_over_an_unreadable_volume(tmp_path):
+    def spoil(subj):
+        (subj / "mri" / "wm.mgz").write_bytes(b"junk")
+        (subj / "tmp").mkdir()
+        (subj / "tmp" / "control.dat").write_text("1 2 3\n")
+
+    assert _provenance(tmp_path, spoil)["edited"] is True
+
+
+def test_provenance_records_every_stage_of_the_first_run(tmp_path):
+    lines = ["recon-all -s sub-01 -i a.nii.gz -autorecon1", "recon-all -s sub-01 -autorecon2 -T2pial",
+             "recon-all -s sub-01 -autorecon-pial"]
+
+    def stages(subj):
+        (subj / "scripts" / "recon-all.log").write_text("\n".join(lines) + "\n")
+
+    record = _provenance(tmp_path, stages)
+    assert record["command"] == lines[0] and record["stages"] == lines[:2]
+    assert record["version"] == 3
