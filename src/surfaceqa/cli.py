@@ -1,11 +1,14 @@
 """Command line entry point: surfaceqa build | serve | finalize | export | report."""
 
 import argparse
+import os
 import sys
 from pathlib import Path
 
+from surfaceqa import progress
 from surfaceqa.build import BuildResult, build_all
 from surfaceqa.discover import find_subjects, source_root
+from surfaceqa.lock import Busy, build_lock
 from surfaceqa.settings import has_placeholder, save_rerun_template, save_sources
 from surfaceqa.site import write_site
 
@@ -21,6 +24,8 @@ def _parser() -> argparse.ArgumentParser:
     build.add_argument("--out", type=Path, help="QA directory (default: surfaceqa/ beside the first source)")
     build.add_argument("--subjects", nargs="+", metavar="PATTERN", help="only subjects matching these shell patterns")
     build.add_argument("--jobs", type=int, default=1, help="subjects to build in parallel")
+    build.add_argument("--progress", action="store_true",
+                       help="keep build_status.json in the QA directory up to date while building")
     build.add_argument("--rerun-template", metavar="TEMPLATE",
                        help="the line that launches these subjects' pipeline, with {command} where "
                             "its command goes; fix guidance then shows complete rerun commands")
@@ -75,14 +80,38 @@ def _build(args: argparse.Namespace) -> int:
         return _fail(str(error))
     if not refs:
         return _fail("no subjects found (a subject is a folder containing mri/ and surf/)")
-    results = build_all(refs, out, jobs=args.jobs)
+    try:
+        with build_lock(out):
+            results = _run_build(args, sources, refs, out)
+    except Busy:
+        return _fail_build("a build of this QA directory is already running")
+    _report(results)
+    print(f"Report: {out / 'index.html'}  (view with: surfaceqa serve {out})")
+    return 1 if any(r.status == "failed" for r in results) else 0
+
+
+def _fail_build(message: str) -> int:
+    print(f"surfaceqa: {message}", file=sys.stderr)
+    return 1
+
+
+def _running(out: Path):
+    """Called by the build as it advances: keeps the status file current."""
+    def tell(stage: str, done: int, total: int) -> None:
+        progress.write(out, state="running", pid=os.getpid(), stage=stage, done=done, total=total)
+    return tell
+
+
+def _run_build(args: argparse.Namespace, sources: list[Path], refs: list, out: Path) -> list[BuildResult]:
+    results = build_all(refs, out, jobs=args.jobs, progress=_running(out) if args.progress else None)
     save_sources(out, sources)
     if args.rerun_template is not None:
         save_rerun_template(out, sorted({ref.source for ref in refs}), args.rerun_template)
     write_site(out)
-    _report(results)
-    print(f"Report: {out / 'index.html'}  (view with: surfaceqa serve {out})")
-    return 1 if any(r.status == "failed" for r in results) else 0
+    if args.progress:
+        progress.write(out, state="done", stage="indicators", done=len(refs), total=len(refs),
+                       problems=progress.problems(out, results), cohort_failed=progress.cohort_failed(out))
+    return results
 
 
 def _serve(args: argparse.Namespace) -> int:
