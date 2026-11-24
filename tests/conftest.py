@@ -5,6 +5,14 @@ import pytest
 from tests.synth import write_subject
 
 
+@pytest.fixture(autouse=True)
+def surfaceqa_home(tmp_path_factory, monkeypatch) -> Path:
+    """No test reads or writes the real list of recent projects."""
+    home = tmp_path_factory.mktemp("surfaceqa_home")
+    monkeypatch.setenv("SURFACEQA_HOME", str(home))
+    return home
+
+
 @pytest.fixture
 def synth_subject(tmp_path) -> Path:
     return write_subject(tmp_path / "fastsurfer")
