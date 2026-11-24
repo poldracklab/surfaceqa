@@ -140,3 +140,14 @@ def test_build_compares_the_subjects_of_a_source_folder(tmp_path, monkeypatch):
     assert cohort.n == 3 and cohort.median is None  # thirty are needed
     page = (qa / "subjects" / "fs__sub-00" / "index.html").read_text()
     assert "needs 30 subjects in this source folder; there are 3" in page
+
+
+def test_report_command_writes_the_page_and_prints_where(qa, capsys):
+    assert main(["report", str(qa)]) == 0
+    assert (qa / "report" / "index.html").is_file()
+    assert str(qa / "report" / "index.html") in capsys.readouterr().out
+
+
+def test_report_refuses_a_folder_that_is_not_a_qa_directory(tmp_path):
+    assert main(["report", str(tmp_path)]) == 2
+    assert not (tmp_path / "report").exists()
