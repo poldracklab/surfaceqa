@@ -193,3 +193,23 @@ def test_an_output_that_cannot_be_written_is_refused(synth_sources, tmp_path):
         _refused(synth_sources, locked, "cannot be written", synth_sources[0])
     finally:
         locked.chmod(0o755)
+
+
+def test_plan_fills_in_the_default_output(synth_sources):
+    assert start.plan(synth_sources, "") == {"out": str(synth_sources[0].parent / "surfaceqa"),
+                                              "error": None, "adds": False, "n_subjects": 2}
+    assert start.plan([str(synth_sources[0]), "  ", ""], "  ")["n_subjects"] == 1
+
+
+def test_plan_with_a_chosen_output(qa, synth_sources, tmp_path):
+    assert start.plan(synth_sources, str(qa))["adds"] is True
+    assert start.plan(synth_sources, str(tmp_path / "x"))["out"] == str(tmp_path / "x")
+
+
+def test_plan_with_a_problem_says_it_and_names_no_output_to_use(synth_sources, tmp_path):
+    assert start.plan([], "") == {"out": "", "error": "Choose a folder to inspect.", "adds": False,
+                                  "n_subjects": 0}
+    bad_source = start.plan([tmp_path / "absent"], "")
+    assert "Not a folder" in bad_source["error"] and bad_source["out"] == ""
+    bad_out = start.plan(synth_sources, str(synth_sources[0] / "qa"))
+    assert "inside" in bad_out["error"] and bad_out["out"] == str(synth_sources[0] / "qa")
