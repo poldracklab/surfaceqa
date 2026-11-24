@@ -204,3 +204,38 @@ def test_nothing_known_gives_empty_tables_not_errors():
     assert indicator_summary([]) == [] and not_computed([]) == 0
     assert all(sum(row["cells"].values()) == 0 for row in finding_kinds([]))
     assert subject_grid([]) == [] and progress([])["subjects"] == 0
+
+
+# ---- reviewers who disagree on whether the subject can be rated at all ------------------------
+
+@pytest.fixture
+def torn():
+    """One reviewer says it cannot be rated; the other graded it D with the sinus major."""
+    return fact("torn", make_review("ann", grade=None, unratable="half the brain is missing"),
+                make_review("bob", grade="D", sinus="major", marks=[mark()]),
+                findings=found(("ribbon_outside_brain", "pial_out", "sinus")))
+
+
+def test_a_subject_they_cannot_agree_to_rate_has_no_final_rating_grade_or_marks(torn):
+    assert progress([torn])["disagreement"] == 1
+    assert dict(grade_counts([torn]))["disagreement"] == 1 and dict(grade_counts([torn]))["D"] == 0
+    for row in region_ratings([torn]):
+        assert row["counts"]["disagreement"] == 1 and sum(row["counts"].values()) == 1
+    assert all(cell == {"subjects": 0, "marks": 0}
+               for row in problem_kinds([torn]) for cell in row["cells"].values())
+    (row,) = subject_grid([torn])
+    assert row["grade"] == "disagreement" and row["marks"] == 0
+    assert set(row["cells"].values()) == {"disagreement"}
+    assert all(sum(r["fired"].values()) + sum(r["quiet"].values()) == 0 for r in agreement([torn]))
+
+
+# ---- subjects on which no indicator could run -------------------------------------------------
+
+def test_a_subject_on_which_no_indicator_ran_is_not_a_subject_without_findings():
+    none_ran = {"indicators": [{"name": n, "status": "not run", "reason": "no file"}
+                               for n in ("ribbon_outside_brain", "thick_patches")], "findings": []}
+    facts = [fact("blind", make_review("ann", sinus="major", marks=[mark()]), findings=none_ran)]
+    assert not_computed(facts) == 1
+    assert all(sum(r["fired"].values()) + sum(r["quiet"].values()) == 0 for r in agreement(facts))
+    rows = {row["name"]: row for row in indicator_summary(facts)}
+    assert rows["thick_patches"]["ran"] == 0 and rows["thick_patches"]["not_run"] == 1

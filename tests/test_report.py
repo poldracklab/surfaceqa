@@ -1,6 +1,7 @@
 """The report page and its tables, made from a QA directory."""
 
 import csv
+from pathlib import Path
 
 import pytest
 
@@ -133,3 +134,60 @@ def test_report_is_made_again_from_the_current_reviews(qa_reviewed):
     rows = _table(qa_reviewed, "region_ratings.tsv")
     cell = next(r for r in rows if (r["source"], r["item"], r["level"]) == ("freesurfer-8.2.0", "cerebellum", "minor"))
     assert cell["subjects"] == "1"
+
+
+# ---- after the review ---------------------------------------------------------------------------
+
+def test_a_source_where_every_review_says_unratable_does_not_claim_there_are_no_reviews(qa_planted):
+    run = current_run_dir(qa_planted, RECON).name
+    submit_review(qa_planted, make_review("cat", RECON, run, grade=None, unratable="no surfaces"))
+    html = write_report(qa_planted).read_text()
+    recon = html[html.index('id="source-freesurfer-8.2.0"'):]
+    assert "No submitted reviews yet." not in recon
+    assert "1 could not be rated" in recon and "No subject has ratings" in recon
+    assert "Ratings by region" not in recon
+    top = html[:html.index("<section")]
+    assert "0 of 3 subjects reviewed; 1 could not be rated" in top
+
+
+def test_agreement_table_says_yes_for_the_subjects_with_a_finding():
+    from surfaceqa.report import _agreement_table
+
+    section = {"source": "fs", "agreement": [{"region": "sinus", "title": "Sinus",
+               "fired": {"none": 1, "minor": 2, "major": 3}, "quiet": {"none": 4, "minor": 5, "major": 6}}]}
+    assert _agreement_table([section]) == [
+        ["fs", "sinus", "yes", "none", 1], ["fs", "sinus", "yes", "minor", 2], ["fs", "sinus", "yes", "major", 3],
+        ["fs", "sinus", "no", "none", 4], ["fs", "sinus", "no", "minor", 5], ["fs", "sinus", "no", "major", 6]]
+
+
+def test_numbers_on_the_page_are_those_of_the_summary(qa_reviewed, monkeypatch):
+    import re
+    from surfaceqa import summary
+
+    rows = [{"region": "sinus", "title": "Sinus-row", "fired": {"none": 11, "minor": 12, "major": 13},
+             "quiet": {"none": 14, "minor": 15, "major": 16}}]
+    monkeypatch.setattr(summary, "agreement", lambda facts: rows)
+    kinds = [{"region": "sinus", "title": "Kinds-row",
+              "cells": {kind: 20 + i for i, kind in enumerate(summary.FINDING_KINDS)}}]
+    monkeypatch.setattr(summary, "finding_kinds", lambda facts: kinds)
+    html = write_report(qa_reviewed).read_text()
+    fast = html[html.index('id="source-fastsurfer"'):html.index('id="source-freesurfer-8.2.0"')]
+
+    def numbers(title):
+        row = re.search(rf"<tr><td>{title}</td>(.*?)</tr>", fast, re.S).group(1)
+        return [int(n) for n in re.findall(r">(\d+)<", row)]
+
+    assert numbers("Sinus-row") == [11, 12, 13, 14, 15, 16]  # finding: none, minor, major; then no finding
+    assert numbers("Kinds-row") == [20, 21, 22, 23, 24, 25]
+    assert "--a: 0.75" in fast  # the largest cell of a table is the darkest
+
+
+def test_the_report_is_replaced_whole_never_half_written(qa_reviewed, monkeypatch):
+    import os
+
+    replaced = []
+    real = os.replace
+    monkeypatch.setattr("surfaceqa.report.os.replace", lambda a, b: (replaced.append(Path(b).name), real(a, b)))
+    write_report(qa_reviewed)
+    assert sorted(replaced) == sorted(["index.html", *TABLES])
+    assert sorted(p.name for p in (qa_reviewed / REPORT_DIR).iterdir()) == sorted(["index.html", *TABLES])
