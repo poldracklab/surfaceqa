@@ -110,3 +110,19 @@ def test_finalize_and_export_refuse_a_folder_that_is_not_a_qa_directory(tmp_path
     assert main(["export", str(tmp_path)]) == 2
     assert "surfaceqa build" in capsys.readouterr().err
     assert list(tmp_path.iterdir()) == []
+
+
+def test_build_stores_the_rerun_template_for_each_source(synth_sources, tmp_path):
+    from surfaceqa.settings import rerun_template
+
+    out = tmp_path / "qa"
+    template = "docker run img {command}"
+    assert main(["build", *map(str, synth_sources), "--out", str(out), "--rerun-template", template]) == 0
+    assert all(rerun_template(out, source.name) == template for source in synth_sources)
+
+
+def test_build_refuses_a_rerun_template_without_the_placeholder(synth_sources, tmp_path, capsys):
+    out = tmp_path / "qa"
+    code = main(["build", str(synth_sources[0]), "--out", str(out), "--rerun-template", "docker run img"])
+    assert code == 2 and "{command}" in capsys.readouterr().err
+    assert not out.exists()
