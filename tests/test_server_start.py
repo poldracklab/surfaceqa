@@ -55,7 +55,17 @@ def test_a_foreign_host_name_is_refused_everywhere(host, path):
 
 @pytest.mark.parametrize("host", ["127.0.0.1:8765", "localhost:8765", "localhost:9000", "127.0.0.1", "LOCALHOST:1"])
 def test_loopback_names_are_accepted_on_any_port(host):
-    assert _client().get("/start", headers={"host": host}).status_code == 200
+    client = _visitor(_app())
+    assert client.get(f"/start?token={TOKEN}", headers={"host": host}).status_code == 303
+    assert client.get("/start", headers={"host": host}).status_code == 200
+
+
+def test_two_copies_on_different_ports_do_not_share_the_token_cookie():
+    first, second = _visitor(_app()), None
+    first.get(f"/start?token={TOKEN}")
+    names = [cookie.name for cookie in first.cookies.jar]
+    first.get(f"/start?token={TOKEN}", headers={"host": "127.0.0.1:8766"})
+    assert len({cookie.name for cookie in first.cookies.jar}) == 2 and names[0].endswith("8765")
 
 
 @pytest.mark.parametrize("origin", ["http://evil.example", "http://evil.example:8765", "null",

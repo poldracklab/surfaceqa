@@ -213,3 +213,13 @@ def test_plan_with_a_problem_says_it_and_names_no_output_to_use(synth_sources, t
     assert "Not a folder" in bad_source["error"] and bad_source["out"] == ""
     bad_out = start.plan(synth_sources, str(synth_sources[0] / "qa"))
     assert "inside" in bad_out["error"] and bad_out["out"] == str(synth_sources[0] / "qa")
+
+
+def test_a_folder_holding_only_build_leftovers_or_hidden_files_counts_as_empty(synth_sources, tmp_path):
+    out = tmp_path / "qa"
+    out.mkdir()
+    for name in ("build.log", "build.lock", "build_status.json", ".DS_Store"):
+        (out / name).write_text("x")
+    assert start.check_request(synth_sources, out) is None and start.adds_to_existing(out) is False
+    (out / "notes.txt").write_text("x")
+    assert "not empty" in start.check_request(synth_sources, out)

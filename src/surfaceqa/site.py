@@ -162,6 +162,11 @@ def render_index(records: list[dict], view: View = View(), report: dict | None =
                                                    **_context(view, "", "/"))
 
 
+def render_page(name: str, **fields) -> str:
+    """A page of the tool itself (the start page, build progress), not of a QA directory."""
+    return environment().get_template(name).render(view=View(), root="/", here="/", **fields)
+
+
 def render_subject(record: dict, view: View = View()) -> str:
     name = "subject.html" if record["has_run"] else NO_RUN_TEMPLATE[record["status"]]
     here = f"/subjects/{quote(record['key'])}/"

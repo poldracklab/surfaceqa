@@ -8,6 +8,7 @@ from surfaceqa.settings import sources as recorded_sources
 
 MAX_FOLDERS = 500
 MOUNTS = ("/Volumes", "/mnt", "/media")
+BUILD_FILES = ("build.lock", "build_status.json", "build.log")
 
 
 def is_qa_dir(path: Path) -> bool:
@@ -99,8 +100,10 @@ def default_out(sources: list[Path]) -> Path:
 
 
 def _empty(folder: Path) -> bool:
+    """Nothing in it but hidden files and what a build that never got going left behind."""
     try:
-        return folder.is_dir() and not any(folder.iterdir())
+        return folder.is_dir() and all(p.name.startswith(".") or p.name in BUILD_FILES
+                                       for p in folder.iterdir())
     except OSError:
         return False
 
@@ -145,3 +148,15 @@ def check_request(sources: list[Path], out: Path) -> str | None:
     """Why this build cannot be started, or None when it can. Nothing is created."""
     sources = [Path(source).expanduser() for source in sources]
     return _source_problem(sources) or _out_problem(sources, out)
+
+
+def plan(sources: list, out: str) -> dict:
+    """What a build of these folders would do: where it goes, how many subjects, and why not
+    if it cannot be started. An empty `out` means the default place."""
+    sources = [Path(source).expanduser() for source in sources if str(source).strip()]
+    problem = _source_problem(sources)
+    if problem:
+        return {"out": "", "error": problem, "adds": False, "n_subjects": 0}
+    target = Path(out.strip()).expanduser() if out.strip() else default_out(sources)
+    return {"out": str(target), "error": _out_problem(sources, target),
+            "adds": adds_to_existing(target), "n_subjects": len(find_subjects(sources))}

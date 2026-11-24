@@ -1,0 +1,7 @@
+{% extends "base.html" %}
+{% block title %}surfaceqa — launch token{% endblock %}
+{% block main %}
+<h1>Launch token needed</h1>
+<p>This copy of surfaceqa was started by someone on this machine. Open the address it printed when it started, or paste the token from that address (the part after <code>token=</code>) here.</p>
+<form method="get" action="{{ action }}" class="start"><label>Token <input name="token" size="40" autocomplete="off" required></label> <button type="submit">Continue</button></form>
+{% endblock %}

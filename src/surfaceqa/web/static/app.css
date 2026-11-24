@@ -127,3 +127,18 @@ body.embedded .viewer { flex: 1; }
 body.embedded .embedded-title { margin: 2px 4px; font-size: 12px; }
 body.embedded .layouts, body.embedded .keys { display: none; }
 .report { margin: 8px 0; } .report button { margin-left: 6px; }
+/* the start page */
+.start { margin: 0 0 28px; max-width: 1000px; }
+.start h2 { font-size: 16px; margin: 0 0 8px; }
+.start input, .start button, .projects button, .report button {
+  background: #1d2329; color: var(--text); border: 1px solid var(--line); border-radius: 4px; padding: 3px 8px; }
+.start button, .projects button { cursor: pointer; }
+.start input { max-width: 100%; }
+.projects form { display: inline; }
+#browser { border: 1px solid var(--line); border-radius: 4px; padding: 6px 12px; margin: 6px 0 12px; max-height: 300px; overflow: auto; }
+#browser ul, #chosen { list-style: none; margin: 4px 0; padding: 0; }
+#browser li { padding: 2px 0; } #crumbs { margin: 2px 0 6px; color: var(--muted); }
+#chosen li { padding: 2px 0; font-family: ui-monospace, monospace; font-size: 13px; }
+.error { color: #ff8a80; }
+p.error { border-left: 3px solid #ff8a80; padding-left: 10px; }
+progress { width: 420px; max-width: 100%; }
