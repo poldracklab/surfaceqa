@@ -57,12 +57,14 @@ test("the bar fills over the three stages", () => {
   assert.equal(progressFraction({state: "done", total: 10}), 1);
 });
 
-test("the page leaves for the project only after a clean build", () => {
-  assert.equal(shouldLeave({state: "done", problems: [], cohort_failed: false}), true);
-  assert.equal(shouldLeave({state: "done", problems: [{}], cohort_failed: false}), false);
-  assert.equal(shouldLeave({state: "done", problems: [], cohort_failed: true}), false);
+test("the page leaves for the project only after a clean build that the tool opened", () => {
+  assert.equal(shouldLeave({state: "done", problems: [], cohort_failed: false, open: true}), true);
+  assert.equal(shouldLeave({state: "done", problems: [], cohort_failed: false, open: false}), false);
+  assert.equal(shouldLeave({state: "done", problems: [], cohort_failed: false}), false);
+  assert.equal(shouldLeave({state: "done", problems: [{}], cohort_failed: false, open: true}), false);
+  assert.equal(shouldLeave({state: "done", problems: [], cohort_failed: true, open: true}), false);
   for (const state of ["running", "cancelled", "stopped", "none"]) {
-    assert.equal(shouldLeave({state, problems: [], cohort_failed: false}), false);
+    assert.equal(shouldLeave({state, problems: [], cohort_failed: false, open: true}), false);
   }
 });
 

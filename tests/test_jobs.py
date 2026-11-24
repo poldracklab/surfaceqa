@@ -126,3 +126,50 @@ def test_cancel_removes_files_the_build_was_in_the_middle_of_writing(many, tmp_p
         path.write_text("{half")
     jobs.cancel(job)
     assert not any(path.exists() for path in left)
+
+
+# ---- found by review -------------------------------------------------------------------------
+
+def _group(pid):
+    import subprocess
+
+    listed = subprocess.run(["ps", "-o", "pid=", "-g", str(pid)], capture_output=True, text=True)
+    return listed.stdout.split()
+
+
+def test_workers_do_not_outlive_a_build_that_died(many, tmp_path):
+    import signal
+
+    job = jobs.start([many], tmp_path / "qa", 3)
+    _wait(job, lambda s: s["done"] >= 1 or s["state"] != "running")
+    group = os.getpgid(job.process.pid)
+    os.kill(job.process.pid, signal.SIGKILL)
+    job.process.wait()
+    assert jobs.status(job)["state"] == "stopped"
+    jobs.cleanup(job)
+    time.sleep(0.3)
+    assert _group(group) == [] and not building(tmp_path / "qa")
+    assert not list((tmp_path / "qa").rglob("*.partial"))
+
+
+def test_cancel_also_clears_up_after_a_build_that_already_died(many, tmp_path):
+    import signal
+
+    job = jobs.start([many], tmp_path / "qa", 3)
+    _wait(job, lambda s: s["done"] >= 1 or s["state"] != "running")
+    group = os.getpgid(job.process.pid)
+    os.kill(job.process.pid, signal.SIGKILL)
+    job.process.wait()
+    jobs.cancel(job)
+    time.sleep(0.3)
+    assert _group(group) == [] and jobs.status(job)["state"] == "stopped"
+
+
+def test_the_sources_are_recorded_before_the_build_ends(many, tmp_path):
+    from surfaceqa.settings import sources
+
+    out = tmp_path / "qa"
+    job = jobs.start([many], out, 1)
+    _wait(job, lambda s: s["done"] >= 1 or s["state"] != "running")
+    jobs.cancel(job)
+    assert sources(out) == [many.resolve()]

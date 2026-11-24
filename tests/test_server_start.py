@@ -246,7 +246,9 @@ def test_forget_removes_a_project_from_the_list(qa, tmp_path):
 
 def test_folder_names_are_escaped(tmp_path):
     odd = tmp_path / "<b>bold</b>" / "qa"
-    (odd / "subjects").mkdir(parents=True)
+    from tests.synth import fake_qa_dir
+
+    fake_qa_dir(odd)
     client = _client()
     client.post("/start/open", **_form(path=str(odd)))
     page = client.get("/start").text
@@ -418,3 +420,78 @@ def test_the_project_can_be_reviewed_while_it_is_being_built_again(many, tmp_pat
     assert client.get("/subjects/study__sub-00/").status_code == 200
     _status(client)
     assert "A build of this project is running" not in client.get("/").text
+
+
+# ---- found by review -------------------------------------------------------------------------
+
+def test_a_freesurfer_folder_named_subjects_is_not_opened_or_written_into(tmp_path):
+    from tests.synth import write_subject
+
+    write_subject(tmp_path / "study" / "subjects")
+    before = sorted(str(p) for p in tmp_path.rglob("*"))
+    client = _client()
+    response = client.post("/start/open", **_form(path=str(tmp_path / "study")))
+    assert response.status_code == 400 and "not a QA directory" in response.text
+    assert sorted(str(p) for p in tmp_path.rglob("*")) == before
+
+
+def test_odd_paths_are_answered_with_a_message(synth_sources):
+    client = _client()
+    nobody = "~nosuchuser-zq9/data"
+    assert client.get("/start/folders", params={"path": nobody}).json()["error"]
+    assert client.get("/start/plan", params={"source": nobody, "out": ""}).json()["error"]
+    assert client.get("/start/plan", params={"source": str(synth_sources[0]), "out": nobody}).json()["error"]
+    assert client.post("/start/open", **_form(path=nobody)).status_code == 400
+    assert client.post("/start/build", **_form(source=nobody, out="")).status_code == 400
+    assert client.post("/start/forget", **_form(path=nobody)).status_code == 303
+
+
+def test_two_checks_at_once_start_one_build(qa, synth_sources, monkeypatch):
+    import threading
+
+    from surfaceqa import jobs
+    from surfaceqa.settings import save_sources
+
+    save_sources(qa, synth_sources)
+    started = []
+
+    class Running:
+        def poll(self):
+            return None
+
+    def slow_start(sources, out, n):
+        started.append(out)
+        time.sleep(0.3)
+        return jobs.Job(out, Running())
+
+    monkeypatch.setattr(jobs, "start", slow_start)
+    client = _client(qa)
+    codes = []
+    threads = [threading.Thread(target=lambda: codes.append(client.post("/start/check", **_form()).status_code))
+               for _ in range(4)]
+    for thread in threads:
+        thread.start()
+    for thread in threads:
+        thread.join()
+    assert len(started) == 1 and sorted(codes) == [303, 409, 409, 409]
+
+
+def test_the_start_page_leads_back_to_a_running_build(many, synth_sources, tmp_path):
+    client = _client()
+    assert "/start/progress" not in client.get("/start").text
+    _build(client, [many], tmp_path / "qa")
+    page = client.get("/start").text
+    assert 'href="/start/progress"' in page and str(tmp_path / "qa") in page
+    refused = _build(client, synth_sources, tmp_path / "other")
+    assert refused.status_code == 409 and 'href="/start/progress"' in refused.text
+    client.post("/start/cancel", **_form())
+    assert "A build is running" not in client.get("/start").text
+
+
+def test_a_build_that_ends_unwatched_is_opened_and_remembered(synth_sources, tmp_path):
+    client = _client()
+    _build(client, synth_sources, tmp_path / "qa")
+    client.app.state.start.job.process.wait()
+    assert str(tmp_path / "qa") in client.get("/start").text
+    assert [p["path"] for p in recent.projects()] == [str(tmp_path / "qa")]
+    assert "sub-01" in client.get("/").text

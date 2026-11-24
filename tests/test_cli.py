@@ -285,3 +285,65 @@ def test_the_browser_is_not_opened_when_nothing_ever_listens(monkeypatch):
     monkeypatch.setattr(webbrowser, "open", opened.append)
     cli._open_when_listening(_free(), "http://x/", wait=0.3).join(timeout=10)
     assert opened == []
+
+
+# ---- found by review -------------------------------------------------------------------------
+
+def test_build_refuses_an_out_that_contains_a_source(tmp_path, capsys):
+    write_subject(tmp_path / "a" / "subjects")
+    before = sorted(str(p) for p in tmp_path.rglob("*"))
+    assert main(["build", str(tmp_path / "a" / "subjects"), "--out", str(tmp_path / "a")]) == 2
+    assert "contains" in capsys.readouterr().err
+    assert sorted(str(p) for p in tmp_path.rglob("*")) == before
+
+
+def _group_members(pid):
+    import subprocess
+
+    return subprocess.run(["ps", "-o", "pid=", "-g", str(pid)], capture_output=True, text=True).stdout.split()
+
+
+@pytest.mark.parametrize("how", ["SIGTERM", "SIGHUP", "SIGINT"])
+def test_closing_the_tool_stops_its_build(how, many, tmp_path, surfaceqa_home):
+    """The real program: a terminal that is closed or an ssh session that drops must not leave
+    a build running that nobody can see or cancel."""
+    import os
+    import signal
+    import subprocess
+    import sys
+    import time
+
+    import httpx
+
+    port = _free()
+    env = {**os.environ, "PYTHONUNBUFFERED": "1", "SURFACEQA_HOME": str(surfaceqa_home)}
+    tool = subprocess.Popen([sys.executable, "-m", "surfaceqa.cli", "start", "--no-browser", "--port", str(port)],
+                            stdout=subprocess.PIPE, text=True, env=env)
+    try:
+        address = re.search(r"http://\S+", tool.stdout.readline()).group(0)
+        base = f"http://127.0.0.1:{port}"
+        with httpx.Client(base_url=base, follow_redirects=True, timeout=10) as client:
+            for _ in range(100):
+                try:
+                    client.get(address)
+                    break
+                except httpx.ConnectError:
+                    time.sleep(0.1)
+            client.post("/start/build", data={"source": str(many), "out": str(tmp_path / "qa")},
+                        headers={"origin": base})
+            status = {}
+            for _ in range(600):
+                status = client.get("/start/status").json()
+                if status.get("pid") and status.get("done", 0) >= 1 or status["state"] != "running":
+                    break
+                time.sleep(0.05)
+        assert status["state"] == "running", status
+        tool.send_signal(getattr(signal, how))
+        tool.wait(timeout=20)
+        deadline = time.monotonic() + 10
+        while _group_members(status["pid"]) and time.monotonic() < deadline:
+            time.sleep(0.1)
+        assert _group_members(status["pid"]) == []
+    finally:
+        if tool.poll() is None:
+            tool.kill()

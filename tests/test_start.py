@@ -4,7 +4,7 @@ import pytest
 
 from surfaceqa import start
 from surfaceqa.settings import save_sources
-from tests.synth import write_subject
+from tests.synth import fake_qa_dir, write_subject
 
 
 @pytest.fixture
@@ -121,10 +121,10 @@ def test_fallback_gets_a_number_when_the_name_is_taken_by_other_sources(tmp_path
     data = tmp_path / "readonly"
     source = write_subject(data / "study").parent
     taken = home / "surfaceqa" / "study"
-    (taken / "subjects").mkdir(parents=True)
+    fake_qa_dir(taken)
     save_sources(taken, [tmp_path / "elsewhere" / "study"])
     mine = home / "surfaceqa" / "study-2"
-    (mine / "subjects").mkdir(parents=True)
+    fake_qa_dir(mine)
     save_sources(mine, [source])
     data.chmod(0o555)
     try:
@@ -223,3 +223,55 @@ def test_a_folder_holding_only_build_leftovers_or_hidden_files_counts_as_empty(s
     assert start.check_request(synth_sources, out) is None and start.adds_to_existing(out) is False
     (out / "notes.txt").write_text("x")
     assert "not empty" in start.check_request(synth_sources, out)
+
+
+# ---- found by review -------------------------------------------------------------------------
+
+def test_a_freesurfer_folder_named_subjects_is_not_a_qa_directory(tmp_path):
+    write_subject(tmp_path / "study" / "subjects")
+    (tmp_path / "bare" / "subjects").mkdir(parents=True)
+    assert not start.is_qa_dir(tmp_path / "study") and not start.is_qa_dir(tmp_path / "bare")
+    assert start.is_qa_dir(fake_qa_dir(tmp_path / "real"))
+    _refused([tmp_path / "study" / "subjects"], tmp_path / "study", "contains", tmp_path)
+    made = start.plan([tmp_path / "study" / "subjects"], str(tmp_path / "study"))
+    assert made["error"] and made["adds"] is False
+
+
+def test_a_subject_folder_that_failed_or_is_incomplete_still_marks_a_qa_directory(tmp_path):
+    for name in ("missing.json", "error.txt"):
+        folder = tmp_path / name / "subjects" / "s__x"
+        folder.mkdir(parents=True)
+        (folder / name).write_text("{}")
+        assert start.is_qa_dir(tmp_path / name)
+
+
+def test_an_output_that_contains_a_source_is_refused(tmp_path):
+    write_subject(tmp_path / "a" / "data")
+    _refused([tmp_path / "a" / "data"], tmp_path / "a", "contains", tmp_path)
+    _refused([tmp_path / "a" / "data" / "sub-01"], tmp_path / "a", "contains", tmp_path)
+    _refused([tmp_path / "a" / "data"], tmp_path, "contains", tmp_path)
+
+
+@pytest.mark.parametrize("text", ["~nosuchuser-zq9/data", "~nosuchuser-zq9"])
+def test_a_home_folder_of_nobody_is_a_message_not_a_failure(text, synth_sources, tmp_path):
+    assert start.list_folders(text)["error"]
+    assert "Not a folder" in start.plan([text], "")["error"]
+    assert start.check_request([text], tmp_path / "qa")
+    assert start.plan(synth_sources, text)["error"]
+
+
+@pytest.mark.skipif(os.geteuid() == 0, reason="root reads everything")
+def test_a_source_that_cannot_be_read_is_a_message(tmp_path):
+    source = write_subject(tmp_path / "study").parent
+    source.chmod(0)
+    try:
+        assert "cannot be read" in start.plan([source], str(tmp_path / "qa"))["error"]
+    finally:
+        source.chmod(0o755)
+
+
+def test_a_folder_a_stopped_build_left_with_only_its_settings_can_be_built_into_again(synth_sources, tmp_path):
+    out = tmp_path / "qa"
+    save_sources(out, synth_sources)
+    (out / "build.log").write_text("x")
+    assert start.check_request(synth_sources, out) is None

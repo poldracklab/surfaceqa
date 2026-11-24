@@ -1,6 +1,7 @@
 from datetime import datetime, timedelta
 
 from surfaceqa import recent
+from tests.synth import fake_qa_dir
 
 T0 = datetime(2026, 11, 24, 9, 0, 0)
 
@@ -18,7 +19,7 @@ def test_no_projects_at_first():
 
 def test_remembered_projects_come_newest_first(qa, tmp_path):
     other = tmp_path / "other"
-    (other / "subjects").mkdir(parents=True)
+    fake_qa_dir(other)
     recent.remember(qa, T0)
     recent.remember(other, T0 + timedelta(hours=1))
     listed = recent.projects()
@@ -26,12 +27,12 @@ def test_remembered_projects_come_newest_first(qa, tmp_path):
     assert listed[1]["opened"] == "2026-11-24 09:00" and listed[1]["exists"] is True
     assert listed[1]["n_subjects"] == 3
     assert listed[1]["sources"] == ["fastsurfer", "freesurfer-8.2.0"]
-    assert listed[0]["n_subjects"] == 0 and listed[0]["sources"] == []
+    assert listed[0]["n_subjects"] == 1 and listed[0]["sources"] == ["study"]
 
 
 def test_opening_again_moves_a_project_to_the_top_without_repeating_it(qa, tmp_path):
     other = tmp_path / "other"
-    (other / "subjects").mkdir(parents=True)
+    fake_qa_dir(other)
     recent.remember(qa, T0)
     recent.remember(other, T0 + timedelta(hours=1))
     recent.remember(qa, T0 + timedelta(hours=2))
