@@ -125,4 +125,4 @@ ul.missing { color: #ffd866; font-size: 13px; padding-left: 18px; margin: 4px 0;
 body.embedded { margin: 0; padding: 0 0 2px; height: 100vh; display: flex; flex-direction: column; overflow: hidden; }
 body.embedded .viewer { flex: 1; }
 body.embedded .embedded-title { margin: 2px 4px; font-size: 12px; }
-body.embedded .layouts, body.embedded .keys, body.embedded #reset-view { display: none; }
+body.embedded .layouts, body.embedded .keys { display: none; }

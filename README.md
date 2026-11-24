@@ -135,6 +135,19 @@ The recipes are in `src/surfaceqa/recipes.json`.
 A subject that shows signs of manual edits (edit files, edit flags or partial reruns in its
 logs) is marked "edited" on the pages and in the `edited` column of the export tables.
 
+## Comparing two reconstructions
+
+When the same person was reconstructed more than once (another pipeline or version in another
+source folder, another session in the same folder, or an earlier run of a subject that was
+edited and rerun), the viewer's toolbar has a "Compare with…" menu. The chosen reconstruction
+is shown under the subject's three views, or beside it when one view is shown.
+
+- The two are kept at the same scanner position. Zoom is separate.
+- Untick "Linked" to move them separately. Reconstructions made from different scans do not
+  line up.
+- The comparison is for looking only. Ratings and marks are made in the subject's own viewer.
+- Subjects are matched by name: `sub-07`, `subj07` and `sub-07_ses-nsdanat` are the same person.
+
 ## Thickness compared across subjects
 
 Once a source folder has 30 subjects, `build` also compares each subject's cortical thickness,
@@ -157,10 +170,6 @@ export/                       tables, written by export
 cohort/                       thickness statistics per source folder
 settings.json                 rerun templates given to build
 ```
-
-## Not built yet
-
-Side-by-side comparison of two reconstructions.
 
 ## Development
 

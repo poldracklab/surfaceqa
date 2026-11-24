@@ -38,3 +38,32 @@ def test_recon_all_6_subject_was_edited_by_hand():
     assert command.split()[0].endswith("/recon-all") and " -all " in command
     evidence = " | ".join(detect_edits(RECON_ALL_6, "freesurfer"))
     assert "tmp/control.dat" in evidence and "wm.mgz" in evidence and "-autorecon2-cp" in evidence
+
+
+@pytest.mark.parametrize("subject", [FASTSURFER, RECON_ALL_8, RECON_ALL_6])
+def test_real_subjects_map_onto_the_common_sphere(subject, tmp_path):
+    import numpy as np
+    from surfaceqa.thickness_map import load_thickness_map, write_thickness_map
+
+    assert write_thickness_map(subject, tmp_path) is True
+    maps = load_thickness_map(tmp_path)
+    assert set(maps) == {"lh", "rh"}
+    for values in maps.values():
+        cortex = values[np.isfinite(values)]
+        assert 0.8 < len(cortex) / len(values) < 0.97  # the rest is the medial wall
+        assert 2.0 < np.median(cortex) < 3.2  # a plausible cortical thickness in mm
+
+
+def test_real_reconstructions_of_one_person_share_scanner_space():
+    import numpy as np
+    from surfaceqa.compare import subject_label
+    from surfaceqa.geometry import load_display_volume
+
+    assert {subject_label(p.name) for p in (FASTSURFER, RECON_ALL_8, RECON_ALL_6)} == {"7"}
+    centres = []
+    for subject in (FASTSURFER, RECON_ALL_8):
+        volume = load_display_volume(subject / "mri" / "orig.mgz")
+        middle = np.append((np.array(volume.data.shape) - 1) / 2, 1.0)
+        centres.append((volume.grid_to_scanner @ middle)[:3])
+    # the same T1, conformed to 0.8 mm by one pipeline and 1 mm by the other
+    assert np.linalg.norm(centres[0] - centres[1]) < 1.0
