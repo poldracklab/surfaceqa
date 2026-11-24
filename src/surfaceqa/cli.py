@@ -1,4 +1,4 @@
-"""Command line entry point: surfaceqa build | serve | finalize | export."""
+"""Command line entry point: surfaceqa build | serve | finalize | export | report."""
 
 import argparse
 import sys
@@ -36,6 +36,8 @@ def _parser() -> argparse.ArgumentParser:
     export = commands.add_parser("export", help="write the ratings, marks, final labels and indicators as tables")
     export.add_argument("qa_dir", type=Path)
     export.add_argument("--out", type=Path, help="folder for the tables (default: export/ in the QA directory)")
+    report = commands.add_parser("report", help="write a page showing how errors are spread over subjects and regions")
+    report.add_argument("qa_dir", type=Path)
     return parser
 
 
@@ -132,7 +134,18 @@ def _export(args: argparse.Namespace) -> int:
     return 0
 
 
-COMMANDS = {"build": _build, "serve": _serve, "finalize": _finalize, "export": _export}
+def _report_command(args: argparse.Namespace) -> int:
+    from surfaceqa.report import write_report
+
+    qa_dir = _qa_dir(args)
+    if qa_dir is None:
+        return _not_a_qa_dir(args)
+    print(write_report(qa_dir))
+    return 0
+
+
+COMMANDS = {"build": _build, "serve": _serve, "finalize": _finalize, "export": _export,
+            "report": _report_command}
 
 
 def main(argv: list[str] | None = None) -> int:

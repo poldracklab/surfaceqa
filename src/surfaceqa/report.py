@@ -1,0 +1,121 @@
+"""Write the report: how errors are spread over the subjects and regions of a QA directory."""
+
+import csv
+from datetime import datetime
+from pathlib import Path
+from urllib.parse import quote
+
+from surfaceqa import summary
+from surfaceqa.consensus import combine
+from surfaceqa.protocol import load_protocol
+from surfaceqa.review_store import list_reviews
+from surfaceqa.site import environment, subject_records
+
+REPORT_DIR = "report"
+PAGE = "index.html"
+TABLES = ("region_ratings.tsv", "problem_kinds.tsv", "indicator_agreement.tsv")
+FINDING_LABELS = {"pial_out": "pial too far out", "gray_missed": "gray matter missed",
+                  "white_short": "white surface short", "crossing": "hemispheres overlap",
+                  "thickness": "thick patch", "topology": "topology defect"}
+STEP = {"none": "step0", "ok": "step0", "minor": "step1", "concern": "step1",
+        "major": "step2", "exclude": "step2"}  # the colour step of each level on its scale
+EXTRA_LABELS = {summary.DISAGREEMENT: "Disagreement", summary.UNREVIEWED: "Not reviewed",
+                summary.UNRATABLE: "Could not be rated"}
+
+
+def _fact(qa_dir: Path, record: dict) -> dict:
+    reviews = list_reviews(qa_dir, record["key"], record["run"]) if record["has_run"] else []
+    return {"key": record["key"], "source": record["source"], "name": record["name"],
+            "href": f"../subjects/{quote(record['key'])}/index.html", "edited": record["edited"],
+            "final": combine(reviews) if record["has_run"] else None,
+            "drafts": sum(1 for review in reviews if not review["submitted"]),
+            "findings": record["qa"]}
+
+
+def subject_facts(qa_dir: Path) -> list[dict]:
+    """What is known about every subject: its reviews combined now, and its indicator results."""
+    return [_fact(Path(qa_dir), record) for record in subject_records(qa_dir)]
+
+
+def _labels() -> dict[str, str]:
+    protocol = load_protocol()
+    levels = protocol["region_scale"] + protocol["pass_scale"]
+    kinds = {kind["id"]: kind["label"] for kind in protocol["mark_kinds"]}
+    return {**{level["id"]: level["label"] for level in levels}, **kinds, **EXTRA_LABELS}
+
+
+def _segments(counts: dict[str, int]) -> list[dict]:
+    """The parts of a stacked bar: each level with its share of the subjects."""
+    total = sum(counts.values()) or 1
+    return [{"level": level, "n": n, "percent": round(100 * n / total, 2), "step": STEP.get(level, level)}
+            for level, n in counts.items() if n]
+
+
+def _region_rows(facts: list[dict]) -> list[dict]:
+    return [{**row, "segments": _segments(row["counts"])} for row in summary.region_ratings(facts)]
+
+
+def _section(source: str, facts: list[dict]) -> dict:
+    state = summary.progress(facts)
+    return {"source": source, "progress": state,
+            "has_reviews": state["reviewed"] + state["disagreement"] > 0,
+            "unbuilt": sum(1 for fact in facts if fact["final"] is None),
+            "grades": summary.grade_counts(facts), "regions": _region_rows(facts),
+            "problems": summary.problem_kinds(facts), "grid": summary.subject_grid(facts),
+            "indicators": summary.indicator_summary(facts),
+            "not_computed": summary.not_computed(facts),
+            "finding_kinds": summary.finding_kinds(facts), "agreement": summary.agreement(facts)}
+
+
+def _sections(facts: list[dict]) -> list[dict]:
+    sources = dict.fromkeys(fact["source"] for fact in facts)
+    return [_section(source, [f for f in facts if f["source"] == source]) for source in sources]
+
+
+def _write_table(path: Path, header: list[str], rows: list[list]) -> None:
+    with open(path, "w", newline="") as handle:
+        writer = csv.writer(handle, delimiter="\t", lineterminator="\n")
+        writer.writerows([header, *rows])
+
+
+def _region_table(sections: list[dict]) -> list[list]:
+    return [[s["source"], row["item"], level, n]
+            for s in sections for row in s["regions"] for level, n in row["counts"].items()]
+
+
+def _problem_table(sections: list[dict]) -> list[list]:
+    return [[s["source"], row["region"], kind, cell["subjects"], cell["marks"]]
+            for s in sections for row in s["problems"] for kind, cell in row["cells"].items()]
+
+
+def _agreement_table(sections: list[dict]) -> list[list]:
+    return [[s["source"], row["region"], finding, level, n]
+            for s in sections for row in s["agreement"]
+            for finding, side in (("yes", "fired"), ("no", "quiet"))
+            for level, n in row[side].items()]
+
+
+def _write_tables(folder: Path, sections: list[dict]) -> None:
+    _write_table(folder / TABLES[0], ["source", "item", "level", "subjects"], _region_table(sections))
+    _write_table(folder / TABLES[1], ["source", "region", "kind", "subjects", "marks"],
+                 _problem_table(sections))
+    _write_table(folder / TABLES[2], ["source", "region", "finding", "rating", "subjects"],
+                 _agreement_table(sections))
+
+
+def write_report(qa_dir: Path, now: datetime | None = None) -> Path:
+    """Make the report page and its tables from the reviews and findings as they are now."""
+    qa_dir = Path(qa_dir)
+    facts = subject_facts(qa_dir)
+    sections = _sections(facts)
+    folder = qa_dir / REPORT_DIR
+    folder.mkdir(exist_ok=True)
+    made = (now or datetime.now()).strftime("%Y-%m-%d %H:%M")
+    page = environment().get_template("report.html").render(
+        name=qa_dir.name, made=made, overall=summary.progress(facts), sections=sections,
+        labels=_labels(), tables=TABLES, kinds_of_finding=summary.FINDING_KINDS,
+        finding_labels=FINDING_LABELS)
+    (folder / PAGE).write_text(page)
+    _write_tables(folder, sections)
+    return folder / PAGE
+

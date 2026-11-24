@@ -8,6 +8,9 @@ from surfaceqa.build import build_all
 from surfaceqa.discover import find_subjects
 from surfaceqa.report import REPORT_DIR, TABLES, subject_facts, write_report
 from surfaceqa.summary import progress, region_ratings
+from surfaceqa.layout import current_run_dir
+from surfaceqa.review_store import submit_review
+from tests.reviewing import make_review
 from tests.synth import write_qa_files, write_subject
 
 FIRST, SECOND, RECON = "fastsurfer__sub-01", "fastsurfer__sub-02", "freesurfer-8.2.0__sub-01"
@@ -102,6 +105,9 @@ def test_names_are_escaped_on_the_page_and_harmless_in_the_tables(tmp_path):
     write_qa_files(subj, pipeline="freesurfer")
     qa = tmp_path / "qa"
     build_all(find_subjects([tmp_path / "fs"]), qa)
+    key = "fs__a<b>&x"
+    # names are listed in the grid of subjects, which needs a review to be shown
+    submit_review(qa, make_review("cat", key, current_run_dir(qa, key).name))
     html = write_report(qa).read_text()
     assert "a&lt;b&gt;&amp;x" in html and "a<b>&x" not in html
     assert all(len(row) == 4 for row in csv.reader(open(qa / REPORT_DIR / "region_ratings.tsv"), delimiter="\t"))
