@@ -13,7 +13,7 @@ not be rated, are in disagreement or have no indicator results keep their own ca
 from collections import Counter
 from statistics import median
 
-from surfaceqa.checklist import HINT_KIND
+from surfaceqa.checklist import HINT_KIND, scored_findings
 from surfaceqa.findings import KINDS
 from surfaceqa.protocol import PASS_ITEMS, item_ids, load_protocol, scale_for
 from surfaceqa.reviews import item_title
@@ -38,6 +38,12 @@ def state(fact: dict) -> str:
     return DISAGREEMENT if final["status"] == DISAGREEMENT else "reviewed"
 
 
+def _torn(fact: dict) -> bool:
+    """The reviewers disagree on whether the subject can be rated at all. Until they settle
+    it, nothing one of them recorded is final: no rating, no grade, no marks."""
+    return fact["final"] is not None and UNRATABLE in fact["final"]["disagreements"]
+
+
 def _rated(facts: list[dict]) -> list[dict]:
     """Subjects with ratings: reviewed, or in disagreement on some items."""
     return [fact for fact in facts if state(fact) in ("reviewed", DISAGREEMENT)]
@@ -52,7 +58,8 @@ def progress(facts: list[dict]) -> dict:
 
 def _grade(fact: dict) -> str:
     grade = fact["final"]["grade"]
-    return DISAGREEMENT if grade["disagree"] else (grade["final"] or NOT_GRADED)
+    disputed = grade["disagree"] or _torn(fact)
+    return DISAGREEMENT if disputed else (grade["final"] or NOT_GRADED)
 
 
 def grade_counts(facts: list[dict]) -> list[tuple[str, int]]:
@@ -66,6 +73,8 @@ def _level(fact: dict, item: str) -> str:
     current = state(fact)
     if current in (UNREVIEWED, UNRATABLE):
         return current
+    if _torn(fact):
+        return DISAGREEMENT
     entry = fact["final"]["items"][item]
     return entry["final"] or (DISAGREEMENT if entry["disagree"] else UNREVIEWED)
 
@@ -84,7 +93,8 @@ def region_ratings(facts: list[dict]) -> list[dict]:
 
 
 def _marks(fact: dict) -> list[dict]:
-    return fact["final"]["marks"] if state(fact) in ("reviewed", DISAGREEMENT) else []
+    counted = state(fact) in ("reviewed", DISAGREEMENT) and not _torn(fact)
+    return fact["final"]["marks"] if counted else []
 
 
 def _problem_cell(facts: list[dict], region: str, kind: str) -> dict:
@@ -127,16 +137,25 @@ def subject_grid(facts: list[dict]) -> list[dict]:
 
 def _scored(fact: dict) -> list[dict]:
     """The subject's findings that count as possible errors, not the places to look."""
-    return [f for f in fact["findings"]["findings"] if f["kind"] != HINT_KIND]
+    return scored_findings(fact["findings"])
 
 
-def _computed(facts: list[dict]) -> list[dict]:
+def _listed(facts: list[dict]) -> list[dict]:
+    """Subjects with an indicator record, whether or not any indicator could run."""
     return [fact for fact in facts if fact["findings"] is not None]
 
 
+def _computed(facts: list[dict]) -> list[dict]:
+    """Subjects on which at least one indicator ran. Only these can be said to have, or not
+    to have, a finding: where nothing ran, "no finding" would mean "not looked at"."""
+    return [fact for fact in _listed(facts)
+            if any(entry["status"] == "ran" for entry in fact["findings"]["indicators"])]
+
+
 def not_computed(facts: list[dict]) -> int:
-    """Subjects that were built but have no indicator results (the indicators failed)."""
-    return sum(1 for fact in facts if fact["final"] is not None and fact["findings"] is None)
+    """Subjects that were built but on which no indicator ran (they failed, or lacked their files)."""
+    computed = {fact["key"] for fact in _computed(facts)}
+    return sum(1 for fact in facts if fact["final"] is not None and fact["key"] not in computed)
 
 
 def _indicator_row(name: str, facts: list[dict]) -> dict:
@@ -151,9 +170,9 @@ def _indicator_row(name: str, facts: list[dict]) -> dict:
 
 def indicator_summary(facts: list[dict]) -> list[dict]:
     """Per indicator: on how many subjects it ran, and how many findings it gave."""
-    computed = _computed(facts)
-    names = dict.fromkeys(entry["name"] for fact in computed for entry in fact["findings"]["indicators"])
-    return [_indicator_row(name, computed) for name in names]
+    listed = _listed(facts)
+    names = dict.fromkeys(entry["name"] for fact in listed for entry in fact["findings"]["indicators"])
+    return [_indicator_row(name, listed) for name in names]
 
 
 def finding_kinds(facts: list[dict]) -> list[dict]:

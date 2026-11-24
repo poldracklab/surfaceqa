@@ -53,10 +53,10 @@ td.heat { background: rgba(var(--heat), var(--a, 0)); }
 <body>
 {% macro n_subjects(n) %}{{ n }} subject{{ "" if n == 1 else "s" }}{% endmacro %}
 {% macro mark(level) %}{{ {"none": "", "ok": "", "minor": "m", "concern": "c", "major": "M", "exclude": "X", "disagreement": "≠", "unreviewed": "", "unratable": "–"}[level] }}{% endmacro %}
-{% macro step(level) %}{{ {"none": "step0", "ok": "step0", "minor": "step1", "concern": "step1", "major": "step2", "exclude": "step2"}.get(level, level) }}{% endmacro %}
+{% macro step(level) %}{{ steps.get(level, level) }}{% endmacro %}
 {% macro heat(n, most) %}{% if n %} class="heat" style="--a: {{ (0.15 + 0.6 * n / most) | round(2) }}"{% else %} class="zero"{% endif %}{% endmacro %}
 <h1>Error distribution · {{ name }}</h1>
-<p class="muted">Made {{ made }} from the submitted reviews and the indicator results as they were then. {{ overall.reviewed + overall.disagreement }} of {{ n_subjects(overall.subjects) }} reviewed{% if overall.drafts %}; {{ overall.drafts }} draft{{ "" if overall.drafts == 1 else "s" }} not counted{% endif %}.</p>
+<p class="muted">Made {{ made }} from the submitted reviews and the indicator results as they were then. {{ overall.reviewed + overall.disagreement }} of {{ n_subjects(overall.subjects) }} reviewed{% if overall.unratable %}; {{ overall.unratable }} could not be rated{% endif %}{% if overall.drafts %}; {{ overall.drafts }} draft{{ "" if overall.drafts == 1 else "s" }} not counted{% endif %}.</p>
 <p class="what">Reviewer ratings come first. The automated indicators follow in their own part: they point at places to look and are not judgments. A subject that was not reviewed, or on which an indicator did not run, is shown as such and never as free of errors. Tables: {% for table in tables %}<a href="{{ table }}">{{ table }}</a>{{ ", " if not loop.last }}{% endfor %}.</p>
 {% if sections | length > 1 %}<p>Source folders: {% for s in sections %}<a href="#source-{{ s.source }}">{{ s.source }}</a>{{ " · " if not loop.last }}{% endfor %}</p>{% endif %}
 
@@ -66,13 +66,14 @@ td.heat { background: rgba(var(--heat), var(--a, 0)); }
 <h2>{{ s.source }}</h2>
 <p>{{ p.reviewed + p.disagreement }} of {{ n_subjects(p.subjects) }} reviewed{% if p.disagreement %} ({{ p.disagreement }} with a disagreement between reviewers){% endif %}{% if p.unratable %}; {{ p.unratable }} could not be rated{% endif %}; {{ p.unreviewed }} not reviewed{% if p.drafts %}; {{ p.drafts }} draft{{ "" if p.drafts == 1 else "s" }} not counted{% endif %}.{% if s.unbuilt %} {{ n_subjects(s.unbuilt) }} could not be built and {{ "has" if s.unbuilt == 1 else "have" }} nothing to review.{% endif %}</p>
 
-{% if not s.has_reviews %}
+{% if not s.has_ratings and not p.unratable %}
 <p class="empty">No submitted reviews yet. Nothing is known about the errors in these subjects until someone has reviewed them; the indicator results below only say where to look.</p>
+{% elif not s.has_ratings %}
+<p class="empty">No subject has ratings: every submitted review says its subject could not be rated. The indicator results below only say where to look.</p>
 {% else %}
 <h3>Grades</h3>
 <p class="what">The final grade of each reviewed subject. Reviewers more than one letter apart count as a disagreement.</p>
-{% set most = s.grades | map("last") | max %}
-<div class="grades" role="img" aria-label="Number of subjects per grade">{% for grade, n in s.grades %}<div title="{{ grade }}: {{ n_subjects(n) }}">{% if n %}{{ n }}<i{% if loop.index > loop.length - 2 %} class="other"{% endif %} style="height: {{ (100 * n / most) | round(1) }}%"></i>{% endif %}</div>{% endfor %}</div>
+<div class="grades" role="img" aria-label="Number of subjects per grade">{% for grade, n in s.grades %}<div title="{{ grade }}: {{ n_subjects(n) }}">{% if n %}{{ n }}<i{% if loop.index > loop.length - 2 %} class="other"{% endif %} style="height: {{ (100 * n / s.most_graded) | round(1) }}%"></i>{% endif %}</div>{% endfor %}</div>
 <div class="gradenames">{% for grade, n in s.grades %}<span>{{ {"disagreement": "≠", "not graded": "none"}.get(grade, grade) }}</span>{% endfor %}</div>
 
 <h3>Ratings by region</h3>
@@ -86,15 +87,14 @@ td.heat { background: rgba(var(--heat), var(--a, 0)); }
 <h3>Marked problems</h3>
 <p class="what">Subjects in which a reviewer marked at least one problem of that kind in that region, with the number of marks in brackets. Marks of all the reviewers whose review counts are pooled.</p>
 {% set kinds = s.problems[0].cells.keys() | list %}
-{% set most = [1] + (s.problems | map(attribute="cells") | map("dictsort") | sum(start=[]) | map("last") | map(attribute="subjects") | list) %}
 <div class="scroll"><table>
 <tr><th>Region</th>{% for kind in kinds %}<th>{{ labels[kind] }}</th>{% endfor %}</tr>
-{% for row in s.problems %}<tr><td>{{ row.title }}</td>{% for kind in kinds %}{% set c = row.cells[kind] %}<td{{ heat(c.subjects, most | max) }}>{{ c.subjects }}{% if c.marks %} <span class="muted">({{ c.marks }})</span>{% endif %}</td>{% endfor %}</tr>
+{% for row in s.problems %}<tr><td>{{ row.title }}</td>{% for kind in kinds %}{% set c = row.cells[kind] %}<td{{ heat(c.subjects, s.most_marked) }}>{{ c.subjects }}{% if c.marks %} <span class="muted">({{ c.marks }})</span>{% endif %}</td>{% endfor %}</tr>
 {% endfor %}
 </table></div>
 
 <h3>Subjects by region</h3>
-<p class="what">One row per subject, those with the most severe ratings first. m: minor, M: major, c: concern, X: consider excluding, ≠: reviewers disagree, –: could not be rated; an empty dashed box was not reviewed.</p>
+<p class="what">One row per subject, those with the most severe ratings first. m: minor, M: major, c: concern, X: consider excluding, ≠: reviewers disagree (on that item, or in every box when they disagree on whether the subject is rateable at all), –: could not be rated; an empty dashed box was not reviewed.</p>
 <div class="scroll"><table class="grid">
 <tr><th>Subject</th><th>Grade</th><th>Marks</th>{% for row in s.regions %}<th class="item"><span>{{ row.title }}</span></th>{% endfor %}</tr>
 {% for row in s.grid %}<tr><td><a href="{{ row.href }}">{{ row.name }}</a>{% if row.edited %} <span class="muted">· edited</span>{% endif %}</td><td class="info">{{ {"disagreement": "≠"}.get(row.grade, row.grade) if row.grade else "" }}</td><td class="info">{{ row.marks if row.marks else "" }}</td>{% for item, level in row.cells.items() %}<td><span class="cell {{ step(level) }}" title="{{ labels[level] }}">{{ mark(level) }}</span></td>{% endfor %}</tr>
@@ -103,7 +103,7 @@ td.heat { background: rgba(var(--heat), var(--a, 0)); }
 {% endif %}
 
 <h3>Automated indicators — not judgments</h3>
-<p class="what">What the indicators found, whether or not anyone has reviewed the subject. They rank subjects and point at places to look; a subject without findings is not thereby correct.{% if s.not_computed %} {{ n_subjects(s.not_computed) }} without indicator results (the indicators failed) {{ "is" if s.not_computed == 1 else "are" }} in none of these counts.{% endif %}</p>
+<p class="what">What the indicators found, whether or not anyone has reviewed the subject. They rank subjects and point at places to look; a subject without findings is not thereby correct.{% if s.not_computed %} On {{ n_subjects(s.not_computed) }} no indicator ran (they failed, or their input files are missing): {{ "it is" if s.not_computed == 1 else "they are" }} in none of the counts of findings below, since nothing was looked at.{% endif %}</p>
 {% if not s.indicators %}
 <p class="empty">No indicator results for this source folder.</p>
 {% else %}
@@ -115,16 +115,15 @@ td.heat { background: rgba(var(--heat), var(--a, 0)); }
 
 <h3>Indicator findings by region</h3>
 <p class="what">Subjects with at least one finding of that kind in that region. Places to look that are not counted in the score are left out.</p>
-{% set most = [1] + (s.finding_kinds | map(attribute="cells") | map("dictsort") | sum(start=[]) | map("last") | list) %}
 <div class="scroll"><table>
 <tr><th>Region</th>{% for kind in kinds_of_finding %}<th>{{ finding_labels[kind] }}</th>{% endfor %}</tr>
-{% for row in s.finding_kinds %}<tr><td>{{ row.title }}</td>{% for kind in kinds_of_finding %}<td{{ heat(row.cells[kind], most | max) }}>{{ row.cells[kind] }}</td>{% endfor %}</tr>
+{% for row in s.finding_kinds %}<tr><td>{{ row.title }}</td>{% for kind in kinds_of_finding %}<td{{ heat(row.cells[kind], s.most_found) }}>{{ row.cells[kind] }}</td>{% endfor %}</tr>
 {% endfor %}
 </table></div>
 
 <h3>Indicators against reviewers</h3>
-{% if not s.has_reviews %}
-<p class="empty">No submitted reviews yet, so there is nothing to compare the indicators with.</p>
+{% if not s.has_ratings %}
+<p class="empty">No subject has ratings yet, so there is nothing to compare the indicators with.</p>
 {% else %}
 <p class="what">Per region, among the subjects that have both a final rating there and indicator results: how the reviewers rated the region where an indicator had a finding in it, and where none had. Many findings in regions rated None, or many Major ratings without a finding, mean the thresholds need another look.</p>
 <div class="scroll"><table>

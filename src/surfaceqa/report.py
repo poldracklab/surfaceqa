@@ -1,11 +1,13 @@
 """Write the report: how errors are spread over the subjects and regions of a QA directory."""
 
 import csv
+import os
 from datetime import datetime
 from pathlib import Path
 from urllib.parse import quote
 
 from surfaceqa import summary
+from surfaceqa.checklist import WHAT
 from surfaceqa.consensus import combine
 from surfaceqa.protocol import load_protocol
 from surfaceqa.review_store import list_reviews
@@ -14,9 +16,6 @@ from surfaceqa.site import environment, subject_records
 REPORT_DIR = "report"
 PAGE = "index.html"
 TABLES = ("region_ratings.tsv", "problem_kinds.tsv", "indicator_agreement.tsv")
-FINDING_LABELS = {"pial_out": "pial too far out", "gray_missed": "gray matter missed",
-                  "white_short": "white surface short", "crossing": "hemispheres overlap",
-                  "thickness": "thick patch", "topology": "topology defect"}
 STEP = {"none": "step0", "ok": "step0", "minor": "step1", "concern": "step1",
         "major": "step2", "exclude": "step2"}  # the colour step of each level on its scale
 EXTRA_LABELS = {summary.DISAGREEMENT: "Disagreement", summary.UNREVIEWED: "Not reviewed",
@@ -58,7 +57,7 @@ def _region_rows(facts: list[dict]) -> list[dict]:
 def _section(source: str, facts: list[dict]) -> dict:
     state = summary.progress(facts)
     return {"source": source, "progress": state,
-            "has_reviews": state["reviewed"] + state["disagreement"] > 0,
+            "has_ratings": state["reviewed"] + state["disagreement"] > 0,
             "unbuilt": sum(1 for fact in facts if fact["final"] is None),
             "grades": summary.grade_counts(facts), "regions": _region_rows(facts),
             "problems": summary.problem_kinds(facts), "grid": summary.subject_grid(facts),
@@ -67,15 +66,34 @@ def _section(source: str, facts: list[dict]) -> dict:
             "finding_kinds": summary.finding_kinds(facts), "agreement": summary.agreement(facts)}
 
 
+def _with_maxima(section: dict) -> dict:
+    """The largest cell of each heat table, against which its cells are shaded."""
+    subjects = [cell["subjects"] for row in section["problems"] for cell in row["cells"].values()]
+    findings = [n for row in section["finding_kinds"] for n in row["cells"].values()]
+    return {**section, "most_marked": max(subjects, default=0) or 1,
+            "most_found": max(findings, default=0) or 1,
+            "most_graded": max((n for _, n in section["grades"]), default=0) or 1}
+
+
 def _sections(facts: list[dict]) -> list[dict]:
     sources = dict.fromkeys(fact["source"] for fact in facts)
-    return [_section(source, [f for f in facts if f["source"] == source]) for source in sources]
+    return [_with_maxima(_section(source, [f for f in facts if f["source"] == source]))
+            for source in sources]
+
+
+def _replace(path: Path, write) -> None:
+    """Write a file whole: a reader never gets a page that is still being written."""
+    partial = path.with_name(f".{path.name}.{os.getpid()}.partial")
+    with open(partial, "w", newline="") as handle:
+        write(handle)
+    os.replace(partial, path)
 
 
 def _write_table(path: Path, header: list[str], rows: list[list]) -> None:
-    with open(path, "w", newline="") as handle:
-        writer = csv.writer(handle, delimiter="\t", lineterminator="\n")
-        writer.writerows([header, *rows])
+    def write(handle) -> None:
+        csv.writer(handle, delimiter="\t", lineterminator="\n").writerows([header, *rows])
+
+    _replace(path, write)
 
 
 def _region_table(sections: list[dict]) -> list[list]:
@@ -113,9 +131,9 @@ def write_report(qa_dir: Path, now: datetime | None = None) -> Path:
     made = (now or datetime.now()).strftime("%Y-%m-%d %H:%M")
     page = environment().get_template("report.html").render(
         name=qa_dir.name, made=made, overall=summary.progress(facts), sections=sections,
-        labels=_labels(), tables=TABLES, kinds_of_finding=summary.FINDING_KINDS,
-        finding_labels=FINDING_LABELS)
-    (folder / PAGE).write_text(page)
+        labels=_labels(), tables=TABLES, steps=STEP, kinds_of_finding=summary.FINDING_KINDS,
+        finding_labels=WHAT)
+    _replace(folder / PAGE, lambda handle: handle.write(page))
     _write_tables(folder, sections)
     return folder / PAGE
 
