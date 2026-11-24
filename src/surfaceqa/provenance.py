@@ -7,16 +7,17 @@ import json
 from pathlib import Path
 
 from surfaceqa.discover import SubjectRef
-from surfaceqa.edits import BFS, BFS_EDIT, FASTSURFER_SEG_EDIT, RECON_ALL_EDIT_FILES, WM, detect_edits
-from surfaceqa.invocation import original_command
+from surfaceqa.edits import BFS, BFS_EDIT, FASTSURFER_SEG_EDIT, RECON_ALL_EDIT_FILES, WM, detect_edits, edit_state
+from surfaceqa.invocation import first_run_commands
 from surfaceqa.layout import current_run_dir, read_json
 from surfaceqa.pipelines import PipelineInfo
 
-PROVENANCE_VERSION = 2  # raise when what is recorded changes, so it is recorded again
+PROVENANCE_VERSION = 3  # raise when what is recorded changes, so it is recorded again
 PROVENANCE_FILE = "provenance.json"
 WATCHED = ("scripts/deep-seg.log", "scripts/recon-surf.log", "scripts/recon-all.log",
            BFS, BFS_EDIT, FASTSURFER_SEG_EDIT, WM, *RECON_ALL_EDIT_FILES)
-SHAPE = {"command": (str, type(None)), "edited": bool, "evidence": list, "signature": dict}
+SHAPE = {"command": (str, type(None)), "stages": list, "edited": (bool, type(None)),
+         "evidence": list, "signature": dict}
 
 
 def _signature(subject_dir: Path) -> dict[str, list[int]]:
@@ -43,8 +44,10 @@ def write_provenance(ref: SubjectRef, pipeline: PipelineInfo, run_dir: Path) -> 
     if stored and stored.get("version") == PROVENANCE_VERSION and stored["signature"] == signature:
         return False
     evidence = detect_edits(ref.path, pipeline.name)
-    record = {"version": PROVENANCE_VERSION, "command": original_command(ref.path, pipeline.name),
-              "edited": bool(evidence), "evidence": evidence, "signature": signature}
+    stages = first_run_commands(ref.path, pipeline.name)
+    record = {"version": PROVENANCE_VERSION, "command": stages[0] if stages else None,
+              "stages": stages, "edited": edit_state(evidence), "evidence": evidence,
+              "signature": signature}
     (Path(run_dir) / PROVENANCE_FILE).write_text(json.dumps(record, indent=1))
     return True
 

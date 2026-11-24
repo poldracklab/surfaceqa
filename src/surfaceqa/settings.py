@@ -18,7 +18,8 @@ def _templates(qa_dir: Path) -> dict[str, str]:
     templates = stored.get("rerun_templates") if isinstance(stored, dict) else None
     if not isinstance(templates, dict):
         return {}
-    return {source: text for source, text in templates.items() if isinstance(text, str)}
+    return {source: text for source, text in templates.items()
+            if isinstance(text, str) and has_placeholder(text)}
 
 
 def save_rerun_template(qa_dir: Path, sources: list[str], template: str) -> None:

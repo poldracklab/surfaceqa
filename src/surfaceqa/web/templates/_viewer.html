@@ -1,9 +1,11 @@
-<section class="viewer" id="viewer"{% if subject.hide_indicators %} data-findings="off"{% endif %} data-run="{{ run_url }}" data-meta="{{ run_url }}meta.json">
+{# in a blind review the comparison never shows findings: it sits beside a subject under review #}
+{% set no_findings = subject.hide_indicators or (embedded and view.blind) %}
+<section class="viewer" id="viewer"{% if no_findings %} data-findings="off"{% endif %} data-run="{{ run_url }}" data-meta="{{ run_url }}meta.json">
 <div class="toolbar">
 <label><input type="checkbox" id="show-surfaces" checked> Surfaces</label>
 <label><input type="checkbox" id="show-pial" checked> pial</label>
 <label><input type="checkbox" id="show-white" checked> white</label>
-{% if not subject.hide_indicators %}<label><input type="checkbox" id="show-findings" checked> Findings</label>{% endif %}
+{% if not no_findings %}<label><input type="checkbox" id="show-findings" checked> Findings</label>{% endif %}
 <button type="button" id="reset-view">Reset view</button>
 {% if subject.compare and not embedded %}
 <select id="compare-with" aria-label="Compare with another reconstruction">

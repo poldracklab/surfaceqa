@@ -7,7 +7,7 @@ from surfaceqa.provenance import load_provenance
 from surfaceqa.review_store import load_review
 from surfaceqa.settings import rerun_template
 
-NO_GUIDANCE = {"guidance": None, "guidance_from": None, "edited": False, "evidence": []}
+NO_GUIDANCE = {"guidance": None, "guidance_from": None, "edited": None, "evidence": []}
 UNSETTLED = ("unreviewed", "disagreement")
 
 
@@ -40,6 +40,14 @@ def _marks(qa_dir: Path, record: dict, view, fields: dict) -> tuple[list[dict], 
     return (own, "own") if own is not None else ([], None)
 
 
+def _shown_provenance(provenance: dict | None, fields: dict) -> dict | None:
+    """The record of how the subject was made, without its edit state for a blind reviewer
+    who has not submitted: knowing a subject was edited could colour the review."""
+    if provenance is None or not fields["hide_indicators"]:
+        return provenance
+    return {**provenance, "edited": None, "evidence": []}
+
+
 def guidance_fields(qa_dir: Path, record: dict, view, fields: dict) -> dict:
     """Fix guidance for one subject as `view.reviewer` may see it.
 
@@ -48,9 +56,9 @@ def guidance_fields(qa_dir: Path, record: dict, view, fields: dict) -> dict:
     """
     if not record["has_run"]:
         return dict(NO_GUIDANCE)
-    provenance = load_provenance(qa_dir, record["key"])
+    provenance = _shown_provenance(load_provenance(qa_dir, record["key"]), fields)
     marks, source = _marks(qa_dir, record, view, fields)
     guidance = build_guidance(record, provenance, marks, rerun_template(qa_dir, record["source"]))
     return {"guidance": guidance, "guidance_from": source,
-            "edited": bool(provenance and provenance["edited"]),
+            "edited": provenance["edited"] if provenance else None,
             "evidence": provenance["evidence"] if provenance else []}

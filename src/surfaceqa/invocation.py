@@ -10,7 +10,14 @@ REPLACED_FLAGS = ("--edits", "--surf_only", "--seg_only")  # a rerun sets these 
 STATUS_WORDS = {"finished", "exited"}  # recon-all's own closing lines also start with its name
 FASTSURFER_PLACEHOLDER = "run_fastsurfer.sh <the options of the first run>"
 RECON_ALL_PLACEHOLDER = "<the other options of the first run, such as -T2pial>"
-DROPPED_WITH_VALUE = {"-i", "-T2", "-FLAIR", "-s", "-subjid", "-subject", "-sid"}
+# Options of a first run that a rerun must not repeat, with how many values follow each:
+# its inputs and subject, and add-on analyses that are not part of rebuilding the surfaces.
+# Compared in lower case with one dash, as recon-all accepts several spellings.
+DROPPED = {"-i": 1, "-t2": 1, "-flair": 1, "-s": 1, "-subjid": 1, "-subject": 1, "-sid": 1,
+           "-long": 2, "-all": 0, "-brainstem-structures": 0, "-qcache": 0,
+           "-hippocampal-subfields-t1": 0, "-hippocampal-subfields-t2": 2,
+           "-hippocampal-subfields-t1t2": 2}
+RERUN_FLAGS = {"-autorecon2-wm", "-autorecon2-cp", "-autorecon-pial", "-autorecon-bfs"}  # after an edit
 PLACEHOLDER = "{command}"
 
 
@@ -57,6 +64,16 @@ def original_command(subject_dir: Path, pipeline: str) -> str | None:
     return next(iter(all_commands(subject_dir, pipeline)), None)
 
 
+def first_run_commands(subject_dir: Path, pipeline: str) -> list[str]:
+    """The commands that made the subject, before any rerun after an edit."""
+    first = []
+    for command in all_commands(subject_dir, pipeline):
+        if first and RERUN_FLAGS & set(command.split()):
+            break
+        first.append(command)
+    return first
+
+
 def _words(command: str | None) -> list[str] | None:
     try:
         return shlex.split(command or "") or None
@@ -71,43 +88,74 @@ def _fastsurfer_rerun(words: list[str] | None, flags: list[str]) -> str:
     return shlex.join(kept + flags)
 
 
-def _kept_options(words: list[str]) -> list[str]:
-    """The first run's options without its inputs, its subject and its stage flags."""
-    kept, skip = [], False
+def _spelling(word: str) -> str:
+    return "-" + word.lstrip("-").lower()
+
+
+def _option_groups(words: list[str]) -> list[list[str]]:
+    """Each kept option of a command with its values, without inputs, subject and stage flags."""
+    groups, skip = [], 0
     for word in words[1:]:
+        name = _spelling(word)
         if skip:
-            skip = False
-        elif word in DROPPED_WITH_VALUE:
-            skip = True
-        elif word == "-expert":
-            kept.append("-xopts-use")
-            skip = True
-        elif word != "-all" and not word.startswith("-autorecon"):
-            kept.append(word)
-    return kept
+            skip -= 1
+        elif name in DROPPED:
+            skip = DROPPED[name]
+        elif name == "-expert":
+            groups.append(["-xopts-use"])
+            skip = 1
+        elif word.startswith("-") and not name.startswith("-autorecon"):
+            groups.append([word])
+        elif not word.startswith("-") and groups:
+            groups[-1].append(word)
+    return groups
 
 
-def _recon_all_rerun(words: list[str] | None, stages: list[str], name: str) -> str:
-    start = shlex.join(["recon-all", "-s", name, *stages])
+def _kept_options(commands: list[list[str]]) -> list[str]:
+    """The options of the first run's stages, each once, as first given."""
+    kept: dict[str, list[str]] = {}
+    for words in commands:
+        for group in _option_groups(words):
+            kept.setdefault(group[0], group)
+    return [word for group in kept.values() for word in group]
+
+
+def _subject_words(words: list[str] | None, name: str) -> list[str]:
+    """How the rerun names its subject: `-s name`, or the first run's `-long timepoint base`."""
+    spelled = [_spelling(word) for word in words or []]
+    if "-long" in spelled and len(words) > spelled.index("-long") + 2:
+        at = spelled.index("-long")
+        return ["-long", *words[at + 1:at + 3]]
+    return ["-s", name]
+
+
+def _recon_all_rerun(words: list[str] | None, stages: list[str], name: str,
+                     more: list[list[str]]) -> str:
+    start = shlex.join(["recon-all", *_subject_words(words, name), *stages])
     if words is None:
         return f"{start} {RECON_ALL_PLACEHOLDER}"
-    return " ".join([start, shlex.join(_kept_options(words))]).strip()
+    return " ".join([start, shlex.join(_kept_options([words, *more]))]).strip()
 
 
-def _bare_commands(pipeline: str, command: str | None, name: str) -> dict[str, str]:
+def _bare_commands(pipeline: str, command: str | None, name: str, more) -> dict[str, str]:
     words = _words(command)
     if pipeline == "fastsurfer":
         return {key: _fastsurfer_rerun(words, flags) for key, flags in FASTSURFER_FLAGS.items()}
     if pipeline == "freesurfer":
-        return {key: _recon_all_rerun(words, stages, name)
+        later = [w for w in (_words(c) for c in more) if w]
+        return {key: _recon_all_rerun(words, stages, name, later)
                 for key, stages in RECON_ALL_STAGES.items()}
     return {}
 
 
 def rerun_commands(pipeline: str, command: str | None, name: str,
-                   template: str | None = None) -> dict[str, str]:
-    """The rerun command for each kind of edit; `template` is the user's launch line."""
-    commands = _bare_commands(pipeline, command, name)
+                   template: str | None = None, more: tuple[str, ...] | list[str] = ()) -> dict[str, str]:
+    """The rerun command for each kind of edit.
+
+    `template` is the user's launch line; `more` are the later stages of a first run that
+    was done in several commands, whose options a rerun needs as well.
+    """
+    commands = _bare_commands(pipeline, command, name, more)
     if not template:
         return commands
     return {key: template.replace(PLACEHOLDER, value) for key, value in commands.items()}

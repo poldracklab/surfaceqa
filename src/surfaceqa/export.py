@@ -24,7 +24,8 @@ def _cell(value) -> str:
 
 
 def _yes(flag) -> str:
-    return "yes" if flag else "no"
+    """Blank when it is not known: never recorded, or a file could not be checked."""
+    return "" if flag is None else ("yes" if flag else "no")
 
 
 def _write(path: Path, header: list[str], rows: list[dict]) -> Path:

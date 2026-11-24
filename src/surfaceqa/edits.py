@@ -9,14 +9,14 @@ from pathlib import Path
 import nibabel as nib
 import numpy as np
 
-from surfaceqa.invocation import all_commands
+from surfaceqa.invocation import RERUN_FLAGS, all_commands
 
 BFS = "mri/brain.finalsurfs.mgz"
 BFS_EDIT = "mri/brain.finalsurfs.manedit.mgz"
 FASTSURFER_SEG_EDIT = "mri/aparc.DKTatlas+aseg.deep.manedit.mgz"
 RECON_ALL_EDIT_FILES = ("tmp/control.dat", "mri/aseg.manedit.mgz")
 WM = "mri/wm.mgz"
-RERUN_FLAGS = {"-autorecon2-wm", "-autorecon2-cp", "-autorecon-pial", "-autorecon-bfs"}
+NOT_CHECKED = "could not be read, so it was not checked for edits"
 ERASED = 1  # recon-all 8 itself writes 255 into wm.mgz, so only erased voxels are evidence
 
 
@@ -35,7 +35,7 @@ def _count(subject_dir: Path, rel: str, count) -> int | str | None:
     try:
         return count()
     except Exception:
-        return f"{rel} could not be read, so it was not checked for edits"
+        return f"{rel} {NOT_CHECKED}"
 
 
 def _voxel_evidence(found: int | str | None, sentence: str) -> list[str]:
@@ -93,3 +93,11 @@ def detect_edits(subject_dir: Path, pipeline: str) -> list[str]:
     if pipeline == "fastsurfer":
         return _fastsurfer_evidence(subject_dir)
     return _recon_all_evidence(subject_dir) if pipeline == "freesurfer" else []
+
+
+def edit_state(evidence: list[str]) -> bool | None:
+    """Edited (True), not (False), or unknown (None) when a file could not be checked and
+    nothing else shows an edit."""
+    if any(not sentence.endswith(NOT_CHECKED) for sentence in evidence):
+        return True
+    return None if evidence else False
