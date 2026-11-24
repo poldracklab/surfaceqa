@@ -1,0 +1,36 @@
+{% set g = subject.guidance %}
+<h2>Fix guidance</h2>
+{% if subject.guidance_from == "final" %}<p class="note">From the final labels.</p>
+{% elif subject.guidance_from == "own" %}<p class="note">From your review.</p>{% endif %}
+{% if not g %}
+<p class="note">{% if subject.guidance_from == "final" %}No region is rated Major in the final labels, so no fix is listed.{% elif reviewing %}Fix guidance appears here for every problem you mark in a region rated Major.{% else %}Fix guidance is shown here once a problem is marked in a region rated Major.{% endif %}</p>
+{% else %}
+{% if g.warning %}<p class="warning">{{ g.warning }}</p>{% endif %}
+{% if g.edited %}<p class="note">This subject has already been edited: {{ g.evidence | join("; ") }}.</p>{% endif %}
+{% for p in g.problems %}
+<article class="problem">
+<h3>{{ p.region_title }}: {{ p.kind_label }}</h3>
+<p class="note">{% if p.reviewer %}Marked by {{ p.reviewer }}. {% endif %}{% if p.where %}At surface coordinate {{ p.where }}. {% endif %}{% if p.note %}<span class="muted">{{ p.note }}</span>{% endif %}</p>
+{% if p.region_note %}<p class="note">{{ p.region_note }}</p>{% endif %}
+{% if not p.steps %}<p class="note">There is no recipe for this problem.</p>{% endif %}
+<ol class="steps">
+{% for s in p.steps %}
+<li>
+<p>{{ s.text }} <span class="muted">{{ s.paint }}</span></p>
+{% if s["copy"] %}<p class="note">Create the file to edit, unless it already exists:</p>
+<div class="command"><pre>{{ s["copy"] }}</pre><button type="button" class="copy">Copy</button></div>{% endif %}
+<p class="note">Open it at the marked place:</p>
+<div class="command"><pre>{{ s.freeview }}</pre><button type="button" class="copy">Copy</button></div>
+<p class="note">{{ s.rerun.label }}:</p>
+<div class="command"><pre>{{ s.rerun.command }}</pre><button type="button" class="copy">Copy</button></div>
+</li>
+{% endfor %}
+</ol>
+</article>
+{% endfor %}
+{% if g.rerun_note %}<p class="note">{{ g.rerun_note }}</p>{% endif %}
+{% if g.never_edit %}<p class="note">Do not edit: {{ g.never_edit | join(", ") }}. {{ g.never_edit_note }}</p>{% endif %}
+{% if g.cautions %}<ul class="marklist">{% for line in g.cautions %}<li>{{ line }}</li>{% endfor %}</ul>{% endif %}
+{% if g.docs %}<p class="note">Editing documentation: <a href="{{ g.docs }}">{{ g.docs }}</a></p>{% endif %}
+<p class="note">After the rerun, run <code>surfaceqa build</code> again; the subject then needs a new review.</p>
+{% endif %}

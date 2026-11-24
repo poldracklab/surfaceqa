@@ -99,3 +99,11 @@ ul.missing { color: #ffd866; font-size: 13px; padding-left: 18px; margin: 4px 0;
 .help dt { color: var(--muted); white-space: nowrap; }
 .help dd { margin: 0; }
 .viewer.picking canvas { cursor: cell; }
+.guidance .problem { border-top: 1px solid var(--line, #333); margin-top: 12px; padding-top: 4px; }
+.guidance h3 { font-size: 14px; margin: 8px 0 4px; }
+.guidance .steps { font-size: 13px; padding-left: 20px; }
+.guidance .steps li { margin-bottom: 10px; }
+.guidance .steps p { margin: 4px 0; }
+.command { display: flex; align-items: flex-start; gap: 8px; margin: 2px 0 6px; }
+.command pre { flex: 1; margin: 0; padding: 6px 8px; background: #111; border: 1px solid #333; border-radius: 4px; font-size: 12px; white-space: pre-wrap; overflow-wrap: anywhere; }
+.command .copy { flex: none; font-size: 12px; }
