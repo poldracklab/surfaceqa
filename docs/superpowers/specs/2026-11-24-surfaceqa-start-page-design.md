@@ -112,7 +112,7 @@ Shown at `/` when no project is open. Three parts:
 ### Safety of start mode
 
 - Binds loopback only.
-- Requests whose `Host` is not `127.0.0.1` or `localhost` (with the port) are
+- Requests whose `Host` is not `127.0.0.1` or `localhost` (any port) are
   refused, and state-changing requests must come from the same origin. This
   stops another web page open in the browser from listing folders or starting
   a build.
@@ -132,6 +132,49 @@ Shown at `/` when no project is open. Three parts:
   `ssh -L 8765:localhost:8765 <server>` then `uvx surfaceqa --no-browser`.
 - Publishing itself (`uv publish`, or pushing to GitHub for
   `uvx --from git+https://…`) is done by the user with their own account.
+
+## Decisions after the builder check
+
+These are the builder's calls unless marked as the user's.
+
+- **Launch secret.** The printed address carries a random token
+  (`http://127.0.0.1:8765/?token=…`). The first visit with it sets a cookie;
+  every start-mode request without the cookie is refused with a page that asks
+  for the token. On a shared machine another local user can reach the port but
+  not the tool. `serve` is unchanged.
+- **Host check.** Any port is accepted on `127.0.0.1` or `localhost`, so ssh
+  forwarding to another local port works.
+- **Output location that already exists.**
+  - An existing QA directory: the new sources are added to it, and the page
+    says so before building.
+  - A non-empty folder that is not a QA directory: refused.
+  - The fallback `~/surfaceqa/<source name>` already used by other sources:
+    `<source name>-2`, `-3`, ….
+- **Source record.** Command-line `build` records its sources in
+  `settings.json` too, so "check for new or changed subjects" works for those
+  projects. Writing the rerun template no longer drops other settings.
+- **While a build runs.** The project stays open for review (build and serve
+  can already run side by side today) with a line saying a build is running
+  and a link to progress. Other projects can be opened.
+- **Cancel** stops at once. `current.json`, `settings.json` and the cohort
+  files are written by replace, so a stop cannot leave half a file. The partial
+  project is opened like any other and is listed in recent projects.
+- **Two instances.** A build holds a lock file in the QA directory; a second
+  build of the same directory, from any instance or the command line, is
+  refused while the lock's process is alive.
+- **Automatic jump to the index** happens only when no subject failed or was
+  incomplete and the cohort comparison did not fail. Otherwise the progress
+  page stays, listing each name with the last line of its error and a link to
+  the project. Indicator errors are shown on the subject pages as today.
+- **Recent projects** show source names read from the subjects' records. A
+  folder counts as a QA directory if it has `subjects/`; its pages are written
+  again on opening if `index.html` is missing.
+- **Not on the start page:** subject name patterns and the site-specific rerun
+  template. Both remain on the command line, and a template set there applies
+  to the project however it is opened.
+- **Package name (the user's).** Whether `surfaceqa` is free on PyPI is checked
+  by the user at publishing time; until then the README also gives the
+  `uvx --from git+…` form.
 
 ## Left to the builder
 
