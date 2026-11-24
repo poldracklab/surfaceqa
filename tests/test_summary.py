@@ -92,7 +92,7 @@ def test_region_ratings_count_every_ratable_subject_once_per_item(cohort):
 def test_problem_kinds_count_subjects_and_marks_per_region(cohort):
     rows = {row["region"]: row for row in problem_kinds(cohort)}
     assert list(rows) == REGIONS
-    kinds = load_protocol()["mark_kinds"]
+    kinds = [kind["id"] for kind in load_protocol()["mark_kinds"]]  # each is {"id", "label", ...}
     assert all(list(row["cells"]) == kinds for row in rows.values())
     assert rows["sinus"]["cells"]["pial_out"] == {"subjects": 1, "marks": 2}
     assert rows["orbitofrontal"]["cells"]["gray_missed"] == {"subjects": 1, "marks": 1}  # rated minor
