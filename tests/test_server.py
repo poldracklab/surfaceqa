@@ -626,8 +626,11 @@ def test_blind_viewer_page_needs_a_name_and_hides_findings_until_submitted(qa_re
     assert _client(qa_reviewed, blind=True).get(_viewer(FIRST, run)).status_code == 404
     waiting = _client(qa_reviewed, "cat", blind=True).get(_viewer(FIRST, run))
     assert waiting.status_code == 200 and 'data-findings="off"' in waiting.text
+    # also after submitting: the frame is shown beside another reconstruction of the same
+    # person, which this reviewer may not have reviewed yet
     done = _client(qa_reviewed, "ann", blind=True).get(_viewer(FIRST, run))
-    assert done.status_code == 200 and "data-findings" not in done.text
+    assert done.status_code == 200 and 'data-findings="off"' in done.text
+    assert "data-findings" not in _client(qa_reviewed, "ann").get(_viewer(FIRST, run)).text
 
 
 def test_blind_findings_of_an_earlier_run_wait_for_the_review_too(qa_reviewed, tmp_path):
