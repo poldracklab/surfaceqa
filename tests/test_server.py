@@ -587,3 +587,63 @@ def test_guidance_address_with_a_trailing_slash_only_redirects_to_the_gated_addr
 def test_subject_page_loads_the_guidance_script(qa_reviewed):
     assert "static/guidance.js" in _client(qa_reviewed, "dan").get(f"/subjects/{RECON}/").text
     assert _client(qa_reviewed).get("/static/guidance.js").status_code == 200
+
+
+# ---- the viewer page of a run, for comparing ----------------------------------------------
+
+def _viewer(key, run):
+    return f"/subjects/{key}/runs/{run}/viewer.html"
+
+
+def test_viewer_page_of_a_run_is_served(qa_reviewed):
+    run = current_run_dir(qa_reviewed, FIRST).name
+    response = _client(qa_reviewed).get(_viewer(FIRST, run))
+    assert response.status_code == 200 and response.text.count("<canvas") == 3
+    assert "data-findings" not in response.text
+    for absent in ("ann-note-xyzzy", "bob-note-quux", "review-data", "checklist"):
+        assert absent not in response.text
+
+
+@pytest.mark.parametrize("key,run", [
+    ("nope__nobody", "0123456789ab"), (FIRST, "0123456789ab"), (FIRST, "not-a-run"),
+    (FIRST, ".."), (FIRST, "%2e%2e"),
+])
+def test_viewer_page_of_something_that_is_not_a_run_is_404(qa_reviewed, key, run):
+    assert _client(qa_reviewed).get(_viewer(key, run)).status_code == 404
+
+
+def test_viewer_page_of_another_subjects_run_is_404(qa_reviewed):
+    other = current_run_dir(qa_reviewed, "freesurfer-8.2.0__sub-01").name
+    assert other != current_run_dir(qa_reviewed, FIRST).name
+    assert _client(qa_reviewed).get(_viewer(FIRST, other)).status_code == 404
+
+
+def test_blind_viewer_page_needs_a_name_and_hides_findings_until_submitted(qa_reviewed):
+    run = current_run_dir(qa_reviewed, FIRST).name
+    assert _client(qa_reviewed, blind=True).get(_viewer(FIRST, run)).status_code == 404
+    waiting = _client(qa_reviewed, "cat", blind=True).get(_viewer(FIRST, run))
+    assert waiting.status_code == 200 and 'data-findings="off"' in waiting.text
+    done = _client(qa_reviewed, "ann", blind=True).get(_viewer(FIRST, run))
+    assert done.status_code == 200 and "data-findings" not in done.text
+
+
+def test_blind_findings_of_an_earlier_run_wait_for_the_review_too(qa_reviewed, tmp_path):
+    import nibabel as nib
+    from surfaceqa.build import build_all
+    from surfaceqa.discover import find_subjects
+    from tests.synth import icosphere
+
+    old = current_run_dir(qa_reviewed, FIRST).name
+    vertices, faces = icosphere(9.0)
+    nib.freesurfer.write_geometry(tmp_path / "fastsurfer" / "sub-01" / "surf" / "lh.pial", vertices, faces)
+    build_all(find_subjects([tmp_path / "fastsurfer"]), qa_reviewed)
+    assert current_run_dir(qa_reviewed, FIRST).name != old
+    path = f"/subjects/{FIRST}/runs/{old}/findings.json"
+    # nobody has reviewed the new run, so the findings of the old one are held back from everyone
+    for reviewer in ("ann", "cat"):
+        assert _client(qa_reviewed, reviewer, blind=True).get(path).status_code == 404
+        page = _client(qa_reviewed, reviewer, blind=True).get(_viewer(FIRST, old))
+        assert page.status_code == 200 and 'data-findings="off"' in page.text
+    assert _client(qa_reviewed, "cat").get(path).status_code == 200
+    subject_page = _client(qa_reviewed, "cat").get(f"/subjects/{FIRST}/").text
+    assert f'<option value="runs/{old}/viewer.html">' in subject_page and "Earlier runs" in subject_page
