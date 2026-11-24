@@ -32,3 +32,8 @@ def test_paths_with_spaces_and_shell_characters_are_quoted():
     assert "'/data/my scans/sub 01; rm -rf x/mri/orig.mgz'" in command
     assert "'/data/my scans/sub 01; rm -rf x/surf/lh.pial':edgecolor=yellow" in command
     assert "sub 01; rm -rf x/mri/wm.mgz'" in command
+
+
+def test_label_volume_is_drawn_with_its_lookup_table():
+    command = freeview_command(S, "mri/seg.mgz", None, overlay=True, lut=True)
+    assert f"{S}/mri/seg.mgz:colormap=lut:opacity=0.4 -f" in command

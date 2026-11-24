@@ -34,7 +34,8 @@ def test_fastsurfer_pial_problem_has_two_steps_in_the_documented_order():
     assert problem["kind_label"] == "pial too far out" and problem["note"] == "into the sinus"
     first, second = problem["steps"]
     assert first["edit"] == "mri/aparc.DKTatlas+aseg.deep.manedit.mgz"
-    assert first["copy"] == (f"cp {S}/mri/aparc.DKTatlas+aseg.deep.mgz "
+    # -n: pasting it again must never overwrite edits made in an earlier round
+    assert first["copy"] == (f"cp -n {S}/mri/aparc.DKTatlas+aseg.deep.mgz "
                              f"{S}/mri/aparc.DKTatlas+aseg.deep.manedit.mgz")
     assert first["rerun"]["command"] == FASTSURFER_COMMAND + " --edits"
     assert second["copy"] is None and second["edit"] == "mri/brain.finalsurfs.manedit.mgz"
@@ -42,6 +43,9 @@ def test_fastsurfer_pial_problem_has_two_steps_in_the_documented_order():
     assert first["rerun"]["label"] != second["rerun"]["label"]
     for step in (first, second):
         assert f"{S}/{step['edit']}" in step["freeview"]
+    # the segmentation is shown with its label colours, which is what label editing needs
+    assert f"{S}/{first['edit']}:colormap=lut:opacity=0.4" in first["freeview"]
+    assert "colormap" not in second["freeview"]
         assert "-ras 1.50 -20.00 3.25 tkreg" in step["freeview"]
         assert step["text"] and step["paint"]
     assert out["never_edit"] == NEVER_EDIT and out["cautions"] and out["rerun_note"]

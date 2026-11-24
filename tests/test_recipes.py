@@ -105,3 +105,14 @@ def test_version_warning():
     assert "2.6" in version_warning("fastsurfer", "2.60.0")  # 2.60 is not 2.6
     assert version_warning("fastsurfer", None)
     assert version_warning("unknown", None)
+
+
+def test_recon_all_cautions_do_not_send_the_user_to_another_folder_than_the_commands():
+    cautions = " ".join(load_recipes()["pipelines"]["freesurfer"]["cautions"])
+    assert "backup" in cautions and "only the copy" not in cautions
+
+
+def test_segmentation_steps_are_shown_with_label_colours():
+    steps = [step for recipe in load_recipes()["pipelines"]["fastsurfer"]["recipes"].values()
+             for step in recipe["steps"]]
+    assert all(bool(step.get("lut")) == (step["edit"] == SEG_EDIT) for step in steps)

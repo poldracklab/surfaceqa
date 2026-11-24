@@ -105,6 +105,13 @@ def test_recon_all_first_run_in_stages_is_not_an_edit(tmp_path):
     assert detect_edits(subj, "freesurfer") == []
 
 
+def test_a_first_run_done_in_stages_is_not_an_edit(free):
+    log = free / "scripts" / "recon-all.log"
+    stages = ["-autorecon1", "-autorecon2-volonly", "-autorecon-hemi lh", "-autorecon3"]
+    log.write_text("".join(recon_all_log(f"/fs/bin/recon-all -s sub-01 {stage}") for stage in stages))
+    assert detect_edits(free, "freesurfer") == []
+
+
 def test_an_unreadable_volume_is_reported_not_raised(free):
     (free / "mri" / "wm.mgz").write_bytes(b"junk")
     (evidence,) = detect_edits(free, "freesurfer")

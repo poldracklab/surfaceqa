@@ -93,3 +93,18 @@ def test_the_first_invocation_is_the_original(tmp_path):
         recon_all_log("/fs/bin/recon-all -s a -all") + recon_all_log("/fs/bin/recon-all -s a -autorecon-pial"))
     assert original_command(fast, "fastsurfer") == "run.sh --sid a"
     assert original_command(free, "freesurfer") == "/fs/bin/recon-all -s a -all"
+
+
+def test_fastsurfer_rerun_drops_seg_only_of_a_split_first_run():
+    runs = rerun_commands("fastsurfer", "run.sh --sid a --seg_only --threads 4", "a")
+    assert runs == {"seg": "run.sh --sid a --threads 4 --edits",
+                    "surf": "run.sh --sid a --threads 4 --edits --surf_only"}
+
+
+def test_recon_all_status_lines_are_not_commands(tmp_path):
+    subj = write_subject(tmp_path / "freesurfer", pipeline="freesurfer", command=None)
+    (subj / "scripts" / "recon-all.log").write_text(
+        "wrapper.sh started\nrecon-all -s sub-01 finished without error at Mon Nov  2 10:00:00\n"
+        "recon-all -s sub-01 exited with ERRORS at Mon Nov  2 11:00:00\n")
+    assert original_command(subj, "freesurfer") is None
+    assert "<" in rerun_commands("freesurfer", original_command(subj, "freesurfer"), "sub-01")["pial"]
