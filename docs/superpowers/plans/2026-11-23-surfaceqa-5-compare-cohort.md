@@ -24,7 +24,7 @@
 ## Facts found while planning
 
 - **The sinus and dura segmentations are already used.** Stage 2 built `ribbon_in_nonbrain_mask`, which reads `mri/vsinus.mgz` and `mri/mca-dura.mgz`. The item I proposed for this stage is done; nothing is planned for it.
-- **There is no real cohort to test on.** The mounted data has at most three reconstructions per source folder, all of subject 07. The cohort indicator can be verified on synthetic data only; its thresholds are uncalibrated until the 50 subjects exist.
+- **A real cohort exists** (given by the user after the first draft): `/Volumes/extdata1/network/FreeSurfer-8.2.0/subjects`, 46 recon-all 8.2 subjects, all with `sphere.reg`. The thresholds are checked on it in Task 8. The NSD folders hold at most three reconstructions each, all of subject 07.
 - **No fsaverage is needed.** Each subject's `surf/?h.sphere.reg` already places its vertices in the common (fsaverage-aligned) spherical coordinates. Sampling every subject at the same fixed points on that sphere gives comparable maps.
 - `viewer.js` holds one viewer per page in module state. Two viewers on one page would need a rewrite; a frame needs none.
 
@@ -143,5 +143,5 @@
 
 - [ ] Real-data test (skipped when the volume is not mounted): the FastSurfer and the recon-all 8.2 `sub-07` are candidates for each other; each has a thickness map with both hemispheres; the cohort indicator is not run with "there are 1" / "there are 3".
 - [ ] Rebuild `~/surfaceqa-demo` (source listing compared before and after). In the browser: FastSurfer `sub-07` compared with recon-all 8.2 `sub-07` — scroll, click and change layout on either side, and check on screenshots that the same sulcus is under both crosshairs; untick "Linked"; compare with the NSD FreeSurfer 6 subject and confirm the note covers the misalignment; a blind reviewer's comparison shows no findings.
-- [ ] Cohort mechanics on real data, outside the test suite: build the three recon-all 8.2 reconstructions with the minimum lowered to 3 into a scratch QA directory, to see that real `sphere.reg` files map and that the pass completes. This checks the plumbing, not the thresholds.
+- [ ] The real cohort: build `/Volumes/extdata1/network/FreeSurfer-8.2.0/subjects` (46 subjects) into `~/surfaceqa-network` (source listing compared before and after). Report how many subjects get cohort findings and how many findings each; look at the largest ones in the viewer; adjust `COHORT_Z`, `COHORT_MIN_MM` or `MIN_COHORT_VERTICES` only if the result is unusable (nearly every subject flagged, or nothing), and record the change as a ruling.
 - [ ] Run all tests. Commit. Final whole-branch review by an independent reviewer, with this plan's Review Focus.
