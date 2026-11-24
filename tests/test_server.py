@@ -516,3 +516,69 @@ def test_scripts_are_checked_with_the_server_before_a_cached_copy_is_used(qa_pla
         assert response.headers["cache-control"] == "no-cache" and response.headers["etag"]
     again = client.get("/static/logic.js", headers={"if-none-match": response.headers["etag"]})
     assert again.status_code in (200, 304)
+
+
+# ---- fix guidance ----------------------------------------------------------------------------
+
+from surfaceqa.finalize import finalize
+from surfaceqa.review_store import submit_review
+from tests.reviewing import MARK
+
+GUIDANCE = f"/subjects/{RECON}/guidance"
+
+
+def _major_body(qa, reviewer, note) -> dict:
+    run = current_run_dir(qa, RECON).name
+    review = make_review(reviewer, RECON, run, sinus="major", marks=[{**MARK, "note": note}])
+    return {key: review[key] for key in ("items", "marks", "grade", "notes", "unratable")}
+
+
+def test_guidance_follows_the_saved_review(qa_reviewed):
+    dan = _client(qa_reviewed, "dan")
+    assert "freeview -v" not in dan.get(GUIDANCE).text
+    assert dan.put(f"/api/review/{RECON}", json=_major_body(qa_reviewed, "dan", "dan-note")).status_code == 200
+    fragment = dan.get(GUIDANCE)
+    assert fragment.status_code == 200 and fragment.headers["content-type"].startswith("text/html")
+    assert "freeview -v" in fragment.text and "-autorecon-pial" in fragment.text
+    assert "dan-note" in fragment.text and "<html" not in fragment.text
+
+
+def test_guidance_of_one_reviewer_is_not_given_to_another(qa_reviewed):
+    _client(qa_reviewed, "dan").put(f"/api/review/{RECON}", json=_major_body(qa_reviewed, "dan", "dan-note"))
+    for blind in (False, True):
+        text = _client(qa_reviewed, "erin", blind=blind).get(GUIDANCE).text
+        assert "freeview -v" not in text and "dan-note" not in text
+
+
+def test_final_guidance_is_given_only_after_the_reviewers_own_submission(qa_reviewed):
+    run = current_run_dir(qa_reviewed, RECON).name
+    for name in ("dan", "erin"):
+        submit_review(qa_reviewed, make_review(name, RECON, run, sinus="major",
+                                               marks=[{**MARK, "note": f"{name}-note"}]))
+    finalize(qa_reviewed)
+    seen = _client(qa_reviewed, "erin").get(GUIDANCE).text
+    assert "From the final labels" in seen and "dan-note" in seen and "erin-note" in seen
+    for blind in (False, True):
+        unseen = _client(qa_reviewed, "fay", blind=blind).get(GUIDANCE).text
+        assert "freeview -v" not in unseen and "dan-note" not in unseen
+    assert "dan-note" in _client(qa_reviewed).get(GUIDANCE).text  # the open overview
+
+
+def test_guidance_is_not_served_blind_without_a_name(qa_reviewed):
+    run = current_run_dir(qa_reviewed, RECON).name
+    submit_review(qa_reviewed, make_review("dan", RECON, run, sinus="major", marks=[dict(MARK)]))
+    finalize(qa_reviewed)
+    assert _client(qa_reviewed, blind=True).get(GUIDANCE).status_code == 404
+
+
+@pytest.mark.parametrize("path", ["/subjects/nope__nobody/guidance", f"{GUIDANCE}/",
+                                  f"/subjects/{RECON}/GUIDANCE", f"{GUIDANCE}.html",
+                                  "/subjects/fastsurfer__sub-01/../guidance"])
+def test_guidance_address_variants_are_not_found(qa_reviewed, path):
+    response = _client(qa_reviewed, "dan").get(path, follow_redirects=False)
+    assert response.status_code == 404
+
+
+def test_subject_page_loads_the_guidance_script(qa_reviewed):
+    assert "static/guidance.js" in _client(qa_reviewed, "dan").get(f"/subjects/{RECON}/").text
+    assert _client(qa_reviewed).get("/static/guidance.js").status_code == 200
