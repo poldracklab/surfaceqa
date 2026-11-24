@@ -6,6 +6,7 @@ from pathlib import Path
 
 from surfaceqa.build import BuildResult, build_all
 from surfaceqa.discover import find_subjects, source_root
+from surfaceqa.settings import has_placeholder, save_rerun_template
 from surfaceqa.site import write_site
 
 USAGE_ERROR = 2
@@ -20,6 +21,9 @@ def _parser() -> argparse.ArgumentParser:
     build.add_argument("--out", type=Path, help="QA directory (default: surfaceqa/ beside the first source)")
     build.add_argument("--subjects", nargs="+", metavar="PATTERN", help="only subjects matching these shell patterns")
     build.add_argument("--jobs", type=int, default=1, help="subjects to build in parallel")
+    build.add_argument("--rerun-template", metavar="TEMPLATE",
+                       help="the line that launches these subjects' pipeline, with {command} where "
+                            "its command goes; fix guidance then shows complete rerun commands")
     serve = commands.add_parser("serve", help="open a QA directory in the browser")
     serve.add_argument("qa_dir", type=Path)
     serve.add_argument("--host", default="127.0.0.1")
@@ -57,6 +61,8 @@ def _build(args: argparse.Namespace) -> int:
     absent = [str(s) for s in sources if not s.is_dir()]
     if absent:
         return _fail(f"not a folder: {', '.join(absent)}")
+    if args.rerun_template is not None and not has_placeholder(args.rerun_template):
+        return _fail("--rerun-template must contain {command} where the pipeline's command goes")
     roots = [source_root(source) for source in sources]
     out = (args.out or roots[0].parent / "surfaceqa").resolve()
     if _inside(out, roots):
@@ -68,6 +74,8 @@ def _build(args: argparse.Namespace) -> int:
     if not refs:
         return _fail("no subjects found (a subject is a folder containing mri/ and surf/)")
     results = build_all(refs, out, jobs=args.jobs)
+    if args.rerun_template is not None:
+        save_rerun_template(out, sorted({ref.source for ref in refs}), args.rerun_template)
     write_site(out)
     _report(results)
     print(f"Report: {out / 'index.html'}  (view with: surfaceqa serve {out})")
