@@ -153,3 +153,38 @@ def test_a_static_folder_that_is_a_link_is_replaced(qa, elsewhere):
     before = _tree(elsewhere)
     write_site(qa)
     assert _tree(elsewhere) == before and not (qa / "static").is_symlink()
+
+
+# ---- the report page of an imported directory ---------------------------------------------------
+
+def _policy(response) -> dict[str, str]:
+    parts = [part.strip().partition(" ") for part in response.headers["content-security-policy"].split(";")]
+    return {name: value for name, _, value in parts if name}
+
+
+def test_the_report_page_is_served_under_a_policy_that_runs_no_script_and_sends_no_form(qa):
+    (qa / "report").mkdir()
+    (qa / "report" / "index.html").write_text('<script>fetch("/start/folders")</script>')
+    response = _open(qa).get("/report/index.html")
+    policy = _policy(response)
+    assert response.status_code == 200
+    assert policy["default-src"] == "'none'" and "script-src" not in policy
+    assert policy["form-action"] == "'none'" and policy["base-uri"] == "'none'"
+    assert response.headers["x-content-type-options"] == "nosniff"
+
+
+def test_the_policy_allows_what_the_report_made_by_surfaceqa_uses(qa):
+    from surfaceqa.report import write_report
+    page = write_report(qa).read_text()
+    assert "<script" not in page and "<form" not in page and "<img" not in page
+    policy = _policy(_open(qa).get("/report/index.html"))
+    assert policy["style-src"] == "'self' 'unsafe-inline'"  # app.css and the page's own styles
+
+
+def test_the_report_tables_are_never_read_as_pages(qa):
+    from surfaceqa.report import TABLES, write_report
+    write_report(qa)
+    (qa / "report" / TABLES[0]).write_text("<script>alert(1)</script>")
+    response = _open(qa).get(f"/report/{TABLES[0]}")
+    assert response.headers["content-type"].startswith("text/tab-separated-values")
+    assert response.headers["x-content-type-options"] == "nosniff"
