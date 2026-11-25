@@ -18,7 +18,8 @@ FRONTAL_MIDLINE_PARCELS = {28, 26, 2, 17}
 ORBITOFRONTAL_PARCELS = {12, 14, 19}
 INFERIOR_TEMPORAL_PARCELS = {9, 7, 15}
 KIND_REGION = {"crossing": "crossing", "white_short": "white_surface", "topology": "white_surface"}
-NO_PARC = "no aparc.DKTatlas+aseg.mgz; findings could not be assigned to regions"
+NO_PARC = ("no usable aparc.DKTatlas+aseg.mgz, so findings could not be assigned to regions and "
+           "the subject was left out of the indicators")
 BOX_PAD = 10  # voxels of padding around the labelled brain when cropping
 PARCEL_NAMES = {
     5: "cuneus", 21: "pericalcarine", 13: "lingual", 7: "fusiform",
@@ -152,10 +153,12 @@ def _anatomical_region(grid, ctx: RegionContext) -> str:
 
 
 def assign_region(finding: Finding, ctx: RegionContext) -> str:
+    """Where a finding is. Without a parcellation that is not known, and no region stands in
+    for it: such a subject is left out of the indicators (see qa.run_indicators)."""
+    if ctx.parcel is None:
+        raise ValueError(ctx.reason)
     if finding.kind in KIND_REGION:
         return KIND_REGION[finding.kind]
-    if ctx.parcel is None:
-        return "outer_edge"
     return _anatomical_region(finding.grid, ctx)
 
 

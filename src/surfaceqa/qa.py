@@ -9,18 +9,19 @@ from surfaceqa import thresholds
 from surfaceqa.findings import Finding
 from surfaceqa.indicators_cohort import COHORT_INDICATORS
 from surfaceqa.indicators_surface import SURFACE_INDICATORS
-from surfaceqa.indicators_volume import VOLUME_INDICATORS, IndicatorResult
+from surfaceqa.indicators_volume import VOLUME_INDICATORS, IndicatorResult, not_run
 from surfaceqa.layout import current_run_dir, read_json, replace_text
 from surfaceqa.regions import assign_region, build_context, default_locations
 from surfaceqa import scoring
 from surfaceqa.scoring import finding_points, suspicion_score
 from surfaceqa.subjectdata import SubjectData
 
-QA_VERSION = 11  # raise whenever indicators, regions or scoring change, so findings are recomputed
+QA_VERSION = 12  # raise whenever indicators, regions or scoring change, so findings are recomputed
 FINDINGS_FILE = "findings.json"
 ERROR_FILE = "qa_error.txt"
 NON_BRAIN_REGIONS = {"sinus", "cerebellum", "outer_edge", "frontal_midline"}
 VOXELS_FILE = "findings_voxels.bin"
+NO_PARCELLATION = "no parcellation"
 INDICATORS = (*VOLUME_INDICATORS, *SURFACE_INDICATORS, *COHORT_INDICATORS)
 
 
@@ -28,11 +29,21 @@ def run_indicators(data: SubjectData) -> tuple[list[IndicatorResult], str]:
     """Every indicator's result with findings assigned to regions, and a note on region assignment."""
     results = [indicator(data) for indicator in INDICATORS]
     context = build_context(data)
+    if context.parcel is None:
+        return [_left_out(result) for result in results], context.reason
     for result in results:
         for finding in result.findings:
             finding.region = assign_region(finding, context)
         relabel_by_region(result.findings)
     return results, context.reason
+
+
+def _left_out(result: IndicatorResult) -> IndicatorResult:
+    """A subject without a parcellation is not scored: where a finding is decides what it
+    means, so a finding that cannot be placed is not reported under a guessed region.
+    An indicator that could not run anyway still says what else it lacked."""
+    lacked = [result.reason] if result.status == "not run" and result.reason else []
+    return not_run(result.name, result.kind, "; ".join([NO_PARCELLATION, *lacked]))
 
 
 def relabel_by_region(findings: list[Finding]) -> None:

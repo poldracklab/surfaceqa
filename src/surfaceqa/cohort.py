@@ -120,10 +120,22 @@ def _update_source(qa_dir: Path, source: str, members: dict[str, Path]) -> bool:
     return True
 
 
+def _stored_sources(qa_dir: Path) -> list[str]:
+    """The source folders that have a stored record, whether or not they still have subjects."""
+    records = {path.stem: read_json(path) for path in sorted(_folder(qa_dir).glob("*.json"))}
+    return [source for source, record in records.items()
+            if isinstance(record, dict) and "signature" in record]
+
+
 def update_cohorts(qa_dir: Path) -> set[str]:
-    """Recompute the statistics of every source folder whose subjects changed; returns those."""
-    return {source for source, members in _members(qa_dir).items()
-            if _update_source(Path(qa_dir), source, members)}
+    """Recompute the statistics of every source folder whose subjects changed; returns those.
+
+    A source folder that lost every member is one of them: its record is emptied, so that
+    nothing is compared any more with subjects that are gone.
+    """
+    members = {**dict.fromkeys(_stored_sources(qa_dir), {}), **_members(qa_dir)}
+    return {source for source, found in members.items()
+            if _update_source(Path(qa_dir), source, found)}
 
 
 def _read_statistics(path: Path) -> tuple[dict, dict] | None:
