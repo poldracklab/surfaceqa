@@ -52,14 +52,21 @@ def _same_origin(request: Request) -> bool:
     return origin is None or urlsplit(origin).netloc.lower() == request.headers.get("host", "").lower()
 
 
+def local_path(target: str) -> str:
+    """An address on this site, or the index: `//host` and `/\\host` lead to another site."""
+    ok = target.startswith("/") and not target.startswith("//") and "\\" not in target
+    return target if ok else "/"
+
+
 def _ask_for_token(request: Request) -> HTMLResponse:
-    return HTMLResponse(render_page("token.html", action=request.url.path), status_code=403)
+    page = render_page("token.html", action=local_path(request.url.path))
+    return HTMLResponse(page, status_code=403)
 
 
 def _admit(request: Request, token: str) -> RedirectResponse:
     """Keep the token in a cookie and take it out of the address."""
     rest = [(name, value) for name, value in request.query_params.multi_items() if name != "token"]
-    target = request.url.path + (f"?{urlencode(rest)}" if rest else "")
+    target = local_path(request.url.path) + (f"?{urlencode(rest)}" if rest else "")
     response = RedirectResponse(target, status_code=303)
     response.set_cookie(_cookie_name(request), token, httponly=True, samesite="strict")
     return response

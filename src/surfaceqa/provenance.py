@@ -50,6 +50,11 @@ def write_provenance(ref: SubjectRef, pipeline: PipelineInfo, run_dir: Path) -> 
     return True
 
 
+def run_provenance(run_dir: Path) -> dict | None:
+    """The record of one run folder, which need not be the subject's current run."""
+    return _read(run_dir)
+
+
 def load_provenance(qa_dir: Path, key: str) -> dict | None:
     run_dir = current_run_dir(qa_dir, key)
     return None if run_dir is None else _read(run_dir)

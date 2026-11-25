@@ -180,3 +180,59 @@ def test_unknown_edit_state_is_exported_blank(qa_reviewed, tmp_path):
     assert edited["freesurfer-8.2.0__sub-01"] == ""  # could not be checked
     assert edited["fastsurfer__sub-02"] == ""  # never recorded
     assert edited["fastsurfer__sub-01"] == "no"
+
+
+# ---- rows of an earlier run -----------------------------------------------------------------
+
+def _edit_and_rerun(qa, source):
+    """Edit fastsurfer/sub-01 by hand and run it again with a newer FastSurfer: a new run."""
+    import nibabel as nib
+    from tests.synth import icosphere
+    subj = source / "sub-01"
+    nib.freesurfer.write_geometry(subj / "surf" / "lh.pial", *icosphere(9.0))
+    (subj / "mri" / "aparc.DKTatlas+aseg.deep.manedit.mgz").write_bytes(b"x")
+    log = subj / "scripts" / "deep-seg.log"
+    log.write_text(log.read_text().replace("2.6.1", "2.7.0"))
+    build_all(find_subjects([source]), qa)
+
+
+def _by_run(rows, key=FIRST) -> dict[str, list[dict]]:
+    found: dict[str, list[dict]] = {}
+    for row in rows:
+        if row["key"] == key:
+            found.setdefault(row["run"], []).append(row)
+    return found
+
+
+def _values(rows, column) -> set[str]:
+    return {row[column] for row in rows}
+
+
+def test_rows_of_an_earlier_run_say_what_that_run_was(qa_reviewed, tmp_path):
+    from tests.reviewing import MARK
+    old = current_run_dir(qa_reviewed, FIRST).name
+    finalize(qa_reviewed)
+    _edit_and_rerun(qa_reviewed, tmp_path / "fastsurfer")
+    new = current_run_dir(qa_reviewed, FIRST).name
+    assert new != old
+    submit_review(qa_reviewed, make_review("ann", FIRST, new, marks=[MARK]))
+    export_tables(qa_reviewed)
+    ratings, marks = _by_run(_table(qa_reviewed, "ratings")), _by_run(_table(qa_reviewed, "marks"))
+    assert _values(ratings[old], "edited") == {"no"} and _values(ratings[new], "edited") == {"yes"}
+    assert _values(ratings[old], "version") == {"2.6.1"} and _values(ratings[new], "version") == {"2.7.0"}
+    assert _values(ratings[old], "current_run") == {"no"} and _values(ratings[new], "current_run") == {"yes"}
+    assert _values(marks[old], "edited") == {"no"} and _values(marks[new], "edited") == {"yes"}
+    final = _by_run(_table(qa_reviewed, "final"))
+    assert list(final) == [old] and _values(final[old], "edited") == {"no"}
+    assert _values(final[old], "status") == {"stale"}
+
+
+def test_rows_of_a_run_that_is_no_longer_there_leave_what_is_not_known_blank(qa_reviewed, tmp_path):
+    import shutil
+    old = current_run_dir(qa_reviewed, FIRST)
+    _edit_and_rerun(qa_reviewed, tmp_path / "fastsurfer")
+    shutil.rmtree(old)
+    export_tables(qa_reviewed)
+    rows = _by_run(_table(qa_reviewed, "ratings"))[old.name]
+    assert _values(rows, "edited") == {""} and _values(rows, "version") == {""}
+    assert _values(rows, "pipeline") == {""} and _values(rows, "source") == {"fastsurfer"}

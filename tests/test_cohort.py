@@ -26,7 +26,7 @@ def _add(qa, source, name, maps, run=RUN, stamp="v1"):
     (run_dir.parent.parent / "current.json").write_text(json.dumps({"run": run}))
     origin = qa / "sources" / source / name
     origin.mkdir(parents=True, exist_ok=True)
-    (run_dir / "meta.json").write_text(json.dumps({"source": source, "path": str(origin), "run": run}))
+    (run_dir / "meta.json").write_text(json.dumps({"source": source, "name": name, "path": str(origin), "run": run}))
     if maps is not None:
         save_thickness_map(run_dir, maps, stamp)
     return run_dir
@@ -178,3 +178,52 @@ def test_unreadable_statistics_are_computed_again(tmp_path):
     (tmp_path / "cohort" / "fs.npz").write_bytes(b"junk")
     assert update_cohorts(tmp_path) == {"fs"}
     assert np.allclose(load_cohort(tmp_path, "fs").median["lh"], 2.0)
+
+
+# ---- a source folder that loses every member -----------------------------------------------------
+
+def _assert_emptied(qa) -> None:
+    cohort = load_cohort(qa, "fs")
+    assert cohort.n == 0 and cohort.median is None and cohort.spread is None
+    assert not (qa / "cohort" / "fs.npz").exists()
+
+
+def test_a_source_whose_subjects_are_all_gone_keeps_no_statistics(tmp_path):
+    import shutil
+    _cohort(tmp_path, [2.0] * 6)
+    _cohort(tmp_path, [4.0] * 6, source="other")
+    update_cohorts(tmp_path)
+    shutil.rmtree(tmp_path / "sources" / "fs")
+    assert update_cohorts(tmp_path) == {"fs"}
+    _assert_emptied(tmp_path)
+    assert load_cohort(tmp_path, "other").n == 6
+    assert update_cohorts(tmp_path) == set()  # emptied once, not again on every build
+
+
+def test_a_source_whose_subjects_all_failed_keeps_no_statistics(tmp_path):
+    _cohort(tmp_path, [2.0] * 6)
+    update_cohorts(tmp_path)
+    for folder in (tmp_path / "subjects").iterdir():
+        (folder / "error.txt").write_text("failed")
+    assert update_cohorts(tmp_path) == {"fs"}
+    _assert_emptied(tmp_path)
+
+
+def test_a_source_that_gets_its_subjects_back_gets_its_statistics_back(tmp_path):
+    import shutil
+    _cohort(tmp_path, [2.0] * 6)
+    update_cohorts(tmp_path)
+    shutil.rmtree(tmp_path / "sources" / "fs")
+    update_cohorts(tmp_path)
+    _cohort(tmp_path, [2.0] * 6)
+    assert update_cohorts(tmp_path) == {"fs"}
+    assert load_cohort(tmp_path, "fs").n == 6 and np.allclose(load_cohort(tmp_path, "fs").median["lh"], 2.0)
+
+
+def test_other_files_in_the_cohort_folder_are_not_taken_for_sources(tmp_path):
+    _cohort(tmp_path, [2.0] * 6)
+    update_cohorts(tmp_path)
+    (tmp_path / "cohort" / "error.txt").write_text("x")
+    (tmp_path / "cohort" / "notes.json").write_text("[1, 2]")
+    assert update_cohorts(tmp_path) == set()
+    assert (tmp_path / "cohort" / "notes.json").read_text() == "[1, 2]"

@@ -1,13 +1,14 @@
 """Load the files the indicators read, as arrays on the display grid."""
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
+from itertools import product
 from pathlib import Path
 
 import nibabel as nib
 import numpy as np
 
 from surfaceqa.cohort import Cohort
-from surfaceqa.geometry import load_display_volume, to_grid
+from surfaceqa.geometry import DisplayVolume, load_display_volume, to_grid
 from surfaceqa.layout import file_signature
 from surfaceqa.pipelines import HEMIS, PipelineInfo, subject_files
 
@@ -17,6 +18,7 @@ NONBRAIN_FILES = {"fastsurfer": ()}
 DEFAULT_NONBRAIN_FILES = ("vsinus.mgz", "mca-dura.mgz")
 PARC_FILE = "aparc.DKTatlas+aseg.mgz"
 SYNTHSEG_FILE = "synthseg.rca.mgz"
+ALIGN_TOLERANCE_MM = 0.1  # how far a corner of a volume may lie from the same corner of the T1
 
 
 @dataclass
@@ -44,6 +46,7 @@ class SubjectData:
     hemis: dict[str, HemiSurface]
     seg_method: str = "network"  # "network" (FastSurfer, SynthSeg) or "atlas" (older recon-all)
     cohort: Cohort | None = None  # thickness across the subjects of the same source folder
+    misaligned: list[str] = field(default_factory=list)  # files left out: not on the T1's grid
 
 
 def _optional(reader, *args):
@@ -54,31 +57,50 @@ def _optional(reader, *args):
         return None
 
 
-def _volume(path: Path, shape) -> np.ndarray | None:
-    volume = _optional(load_display_volume, path)
-    if volume is None or volume.data.shape != tuple(shape):
-        return None
-    return volume.data
+def _aligned(volume: DisplayVolume, grid: DisplayVolume) -> bool:
+    """Whether the same voxel is the same place in the scanner as in the T1.
+
+    Equal array shapes say nothing about that: every corner of the volume must lie within
+    the tolerance of the T1's, which also catches other voxel sizes and orientations.
+    """
+    if volume.data.shape != grid.data.shape:
+        return False
+    corners = np.array([(*corner, 1) for corner in product(*((0, n - 1) for n in grid.data.shape))])
+    apart = corners @ (volume.grid_to_scanner - grid.grid_to_scanner)[:3].T
+    return float(np.linalg.norm(apart, axis=1).max()) <= ALIGN_TOLERANCE_MM
 
 
-def _labels(path: Path, shape) -> np.ndarray | None:
-    data = _volume(path, shape)
-    return None if data is None else np.rint(data).astype(np.int32)
+@dataclass
+class _Reader:
+    """Reads the volumes that go with a T1 and keeps the names of those not on its grid."""
+    grid: DisplayVolume
+    misaligned: list[str] = field(default_factory=list)
 
+    def volume(self, path: Path) -> np.ndarray | None:
+        volume = _optional(load_display_volume, path)
+        if volume is None:
+            return None
+        if not _aligned(volume, self.grid):
+            self.misaligned.append(path.name)
+            return None
+        return volume.data
 
-def _hemi_ribbon(mri: Path, shape) -> dict[str, np.ndarray] | None:
-    masks = {hemi: _volume(mri / f"{hemi}.ribbon.mgz", shape) for hemi in HEMIS}
-    if any(mask is None for mask in masks.values()):
-        return None
-    return {hemi: mask > 0 for hemi, mask in masks.items()}
+    def labels(self, path: Path) -> np.ndarray | None:
+        data = self.volume(path)
+        return None if data is None else np.rint(data).astype(np.int32)
 
+    def hemi_ribbon(self, mri: Path) -> dict[str, np.ndarray] | None:
+        masks = {hemi: self.volume(mri / f"{hemi}.ribbon.mgz") for hemi in HEMIS}
+        if any(mask is None for mask in masks.values()):
+            return None
+        return {hemi: mask > 0 for hemi, mask in masks.items()}
 
-def _nonbrain(mri: Path, names, shape) -> tuple[np.ndarray | None, list[str]]:
-    found = {name: _volume(mri / name, shape) for name in names}
-    found = {name: data for name, data in found.items() if data is not None}
-    if not found:
-        return None, []
-    return np.any([data > 0 for data in found.values()], axis=0), list(found)
+    def nonbrain(self, mri: Path, names) -> tuple[np.ndarray | None, list[str]]:
+        found = {name: self.volume(mri / name) for name in names}
+        found = {name: data for name, data in found.items() if data is not None}
+        if not found:
+            return None, []
+        return np.any([data > 0 for data in found.values()], axis=0), list(found)
 
 
 def _grid_surface(path: Path, tkr_to_grid) -> tuple[np.ndarray, np.ndarray]:
@@ -134,15 +156,15 @@ def load_subject_data(subject_dir: Path, pipeline: PipelineInfo,
     mri = subject_dir / "mri"
     files = subject_files(subject_dir)
     grid = load_display_volume(files.t1)
-    shape = grid.data.shape
+    read = _Reader(grid)
     seg_name = SEG_FILE.get(pipeline.name, DEFAULT_SEG_FILE)
-    seg = _labels(mri / seg_name, shape)
-    nonbrain, names = _nonbrain(mri, NONBRAIN_FILES.get(pipeline.name, DEFAULT_NONBRAIN_FILES), shape)
+    seg = read.labels(mri / seg_name)
+    nonbrain, names = read.nonbrain(mri, NONBRAIN_FILES.get(pipeline.name, DEFAULT_NONBRAIN_FILES))
     hemis = {hemi: _hemi_surface(subject_dir, hemi, files.surfaces[f"{hemi}.pial"], grid.tkr_to_grid)
              for hemi in HEMIS if f"{hemi}.pial" in files.surfaces}
     return SubjectData(
-        voxel_sizes=grid.voxel_sizes, ribbon=_labels(mri / "ribbon.mgz", shape),
-        hemi_ribbon=_hemi_ribbon(mri, shape), seg=seg, seg_name=seg_name if seg is not None else None,
-        nonbrain=nonbrain, nonbrain_names=names, parc=_labels(mri / PARC_FILE, shape),
-        norm=_volume(mri / "norm.mgz", shape), hemis=hemis, seg_method=_seg_method(mri, pipeline),
-        cohort=cohort)
+        voxel_sizes=grid.voxel_sizes, ribbon=read.labels(mri / "ribbon.mgz"),
+        hemi_ribbon=read.hemi_ribbon(mri), seg=seg, seg_name=seg_name if seg is not None else None,
+        nonbrain=nonbrain, nonbrain_names=names, parc=read.labels(mri / PARC_FILE),
+        norm=read.volume(mri / "norm.mgz"), hemis=hemis, seg_method=_seg_method(mri, pipeline),
+        cohort=cohort, misaligned=read.misaligned)

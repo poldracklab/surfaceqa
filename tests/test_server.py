@@ -720,3 +720,55 @@ def test_a_blind_server_neither_makes_nor_serves_the_report(qa_reviewed, reviewe
         assert "Error distribution" not in got.text and "source\t" not in got.text, path
     index = blind.get("/").text
     assert 'action="/report"' not in index and "/report/index.html" not in index
+
+
+# ---- one page saving more than once at a time -------------------------------------------------
+
+def _sent(qa, notes: str, seq: int, page: str = "0123456789abcdef0123456789abcdef", saved=None) -> dict:
+    """What a page sends: its own name and the number of this save, with the stamp it last saw."""
+    return {**_payload(qa, FIRST), "notes": notes, "reviewer": "cat", "saved": saved,
+            "writer": page, "seq": seq}
+
+
+def _stored_notes(client) -> str:
+    return client.get(f"/api/review/{FIRST}").json()["review"]["notes"]
+
+
+def test_a_change_sent_on_leaving_while_a_save_is_on_its_way_is_kept(qa_planted):
+    client = _client(qa_planted, "cat")
+    assert client.put(f"/api/review/{FIRST}", json=_sent(qa_planted, "first", 1)).status_code == 200
+    assert client.put(f"/api/review/{FIRST}", json=_sent(qa_planted, "second", 2)).status_code == 200
+    assert _stored_notes(client) == "second"
+
+
+def test_the_save_that_was_on_its_way_does_not_undo_the_one_sent_on_leaving(qa_planted):
+    client = _client(qa_planted, "cat")
+    client.put(f"/api/review/{FIRST}", json=_sent(qa_planted, "second", 2))
+    late = client.put(f"/api/review/{FIRST}", json=_sent(qa_planted, "first", 1))
+    assert late.status_code == 200 and late.json()["review"]["notes"] == "second"
+    assert _stored_notes(client) == "second"
+
+
+def test_a_save_tried_again_after_its_answer_was_lost_does_not_lock_the_page(qa_planted):
+    client = _client(qa_planted, "cat")
+    client.put(f"/api/review/{FIRST}", json=_sent(qa_planted, "typed", 1))
+    again = client.put(f"/api/review/{FIRST}", json=_sent(qa_planted, "typed", 2))
+    assert again.status_code == 200
+    submitted = client.post(f"/api/review/{FIRST}/submit", json=_sent(qa_planted, "typed", 3))
+    assert submitted.status_code in (200, 422) and "another window" not in str(submitted.json())
+
+
+def test_another_window_behind_a_save_is_still_refused(qa_planted):
+    client = _client(qa_planted, "cat")
+    client.put(f"/api/review/{FIRST}", json=_sent(qa_planted, "first", 1))
+    other = client.put(f"/api/review/{FIRST}", json=_sent(qa_planted, "other", 9, page="f" * 32))
+    assert other.status_code == 409 and "another window" in other.json()["detail"]
+    assert _stored_notes(client) == "first"
+
+
+@pytest.mark.parametrize("fields", [{"writer": "x" * 65}, {"writer": "../a"}, {"writer": 7}, {"seq": -1},
+                                    {"seq": "1"}, {"seq": True}, {"seq": None}, {"writer": None}])
+def test_a_malformed_page_name_or_save_number_is_refused(qa_planted, fields):
+    client = _client(qa_planted, "cat")
+    response = client.put(f"/api/review/{FIRST}", json={**_sent(qa_planted, "x", 1), **fields})
+    assert response.status_code == 422 and not (qa_planted / "ratings").exists()

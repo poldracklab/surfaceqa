@@ -15,6 +15,7 @@ The score only orders subjects and locations for review. It is not a judgment of
 {% for i in subject.partial %}
 <p class="note"><code>{{ i.name }}</code>: {{ i.reason }}.</p>
 {% endfor %}
+{% if subject.qa.input_note %}<p class="warning">Files {{ subject.qa.input_note }}.</p>{% endif %}
 {% if subject.qa.region_note %}<p class="note">{{ subject.qa.region_note }}</p>{% endif %}
 {% for i in subject.qa.indicators if i.dropped %}
 <p class="note"><code>{{ i.name }}</code>: only the {{ i.n_findings }} largest findings are listed; {{ i.dropped }} smaller ones are not shown.</p>

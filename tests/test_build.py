@@ -75,6 +75,51 @@ def test_rebuild_after_surface_change_keeps_old_run(built, synth_subject):
     assert json.loads((runs.parent / "current.json").read_text()) == {"run": new.run}
 
 
+def _rewrite_t1(subject, data=None, shift_mm=0.0):
+    from surfaceqa.pipelines import subject_files
+    path = subject_files(subject).t1
+    img = nib.load(path)
+    affine = img.affine.copy()
+    affine[0, 3] += shift_mm
+    data = np.asarray(img.dataobj) if data is None else data
+    nib.save(nib.MGHImage(data, affine, img.header), path)
+
+
+def _slice_bytes(qa, key, run) -> bytes:
+    return (qa / "subjects" / key / "runs" / run / "slices" / "axial" / "020.jpg").read_bytes()
+
+
+def test_rebuild_after_the_t1_intensities_change_is_a_new_run_with_new_images(built, synth_subject):
+    ref, qa, res = built
+    _rewrite_t1(synth_subject, data=np.zeros((32, 40, 48), dtype=np.uint8))
+    new = build_subject(ref, qa)
+    assert new.status == "built" and new.run != res.run
+    assert _slice_bytes(qa, ref.key, new.run) != _slice_bytes(qa, ref.key, res.run)
+    assert load_meta(qa, ref.key)["run"] == new.run
+    assert {p.name for p in (qa / "subjects" / ref.key / "runs").iterdir()} == {res.run, new.run}
+
+
+def test_rebuild_after_the_t1_geometry_changes_is_a_new_run_with_new_transforms(built, synth_subject):
+    ref, qa, res = built
+    before = np.array(load_meta(qa, ref.key)["grid_to_scanner"])
+    _rewrite_t1(synth_subject, shift_mm=5.0)
+    new = build_subject(ref, qa)
+    after = np.array(load_meta(qa, ref.key)["grid_to_scanner"])
+    assert new.status == "built" and new.run != res.run
+    assert np.abs(after[:3, 3] - before[:3, 3]).max() == pytest.approx(5.0)
+
+
+def test_a_review_of_the_run_before_the_t1_changed_is_not_a_review_of_the_new_run(built, synth_subject):
+    from surfaceqa.review_store import earlier_reviews, load_review, submit_review
+    from tests.reviewing import make_review
+    ref, qa, res = built
+    submit_review(qa, make_review("ann", key=ref.key, run=res.run))
+    _rewrite_t1(synth_subject, shift_mm=5.0)
+    new = build_subject(ref, qa)
+    assert load_review(qa, ref.key, new.run, "ann") is None
+    assert [r["run"] for r in earlier_reviews(qa, ref.key, new.run, "ann")] == [res.run]
+
+
 def test_build_subject_missing_files(tmp_path):
     subj = write_subject(tmp_path / "src", omit=("surf/rh.pial",))
     ref = find_subjects([subj])[0]

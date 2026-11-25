@@ -495,3 +495,34 @@ def test_a_build_that_ends_unwatched_is_opened_and_remembered(synth_sources, tmp
     assert str(tmp_path / "qa") in client.get("/start").text
     assert [p["path"] for p in recent.projects()] == [str(tmp_path / "qa")]
     assert "sub-01" in client.get("/").text
+
+
+# ---- addresses that lead off the site ----------------------------------------------------------
+
+OFF_SITE = ["/%2fexample.com/", "//example.com/", "/%5cexample.com/", "/%2f%5cexample.com", "/%2f%2fexample.com/x"]
+
+
+def _off_site(target: str) -> bool:
+    return target.startswith("//") or "\\" in target or not target.startswith("/")
+
+
+@pytest.mark.parametrize("path", OFF_SITE)
+def test_the_token_form_never_sends_the_token_to_another_site(path):
+    import re
+    page = _visitor(_app()).get(path)
+    assert page.status_code == 403
+    action = re.search(r'<form method="get" action="([^"]*)"', page.text).group(1)
+    assert not _off_site(action)
+
+
+@pytest.mark.parametrize("path", OFF_SITE)
+def test_the_right_token_never_redirects_to_another_site(path):
+    response = _visitor(_app()).get(f"{path}?token={TOKEN}")
+    assert response.status_code == 303 and not _off_site(response.headers["location"])
+
+
+def test_the_token_form_still_returns_to_the_page_that_was_asked_for(qa):
+    client = _visitor(_app(qa))
+    assert 'action="/subjects/fastsurfer__sub-01/"' in client.get("/subjects/fastsurfer__sub-01/").text
+    admitted = client.get(f"/subjects/fastsurfer__sub-01/?token={TOKEN}")
+    assert admitted.headers["location"] == "/subjects/fastsurfer__sub-01/"

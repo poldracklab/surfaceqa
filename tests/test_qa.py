@@ -134,5 +134,52 @@ def test_cohort_finding_is_written_with_a_region(tmp_path, monkeypatch):
     found = write_findings(data, tmp_path)
     (finding,) = [f for f in found["findings"] if f["indicator"] == "cohort_thickness"]
     assert finding["region"] and finding["hemi"] == "lh" and finding["kind"] == "thickness"
-    assert found["qa_version"] == 10
+    assert found["qa_version"] == 12
     assert found["thresholds"]["MIN_COHORT"] == 30
+
+
+# ---- a subject without a parcellation is left out ---------------------------------------------
+
+PARC = "aparc.DKTatlas+aseg.mgz"
+
+
+def _findings(subj, out_dir) -> dict:
+    return write_findings(load_subject_data(subj, detect_pipeline(subj)), out_dir)
+
+
+def _assert_left_out(out: dict) -> None:
+    assert out["findings"] == [] and len(out["indicators"]) > 5
+    assert {i["status"] for i in out["indicators"]} == {"not run"}
+    assert all("parcellation" in i["reason"] and i["n_findings"] == 0 for i in out["indicators"])
+    assert PARC in out["region_note"]
+
+
+def test_without_a_parcellation_no_indicator_runs_and_nothing_is_scored(planted, tmp_path):
+    assert _findings(planted, tmp_path)["score"] > 0
+    (planted / "mri" / PARC).unlink()
+    _assert_left_out(_findings(planted, tmp_path))
+
+
+def test_a_parcellation_without_any_label_is_no_parcellation(planted, tmp_path):
+    import nibabel as nib
+    img = nib.load(planted / "mri" / PARC)
+    nib.save(nib.MGHImage(np.zeros(img.shape, np.int32), img.affine), planted / "mri" / PARC)
+    _assert_left_out(_findings(planted, tmp_path))
+
+
+def test_a_parcellation_that_is_not_on_the_t1s_grid_is_no_parcellation(planted, tmp_path):
+    import nibabel as nib
+    img = nib.load(planted / "mri" / PARC)
+    affine = img.affine.copy()
+    affine[0, 3] += 40
+    nib.save(nib.MGHImage(np.asarray(img.dataobj), affine), planted / "mri" / PARC)
+    out = _findings(planted, tmp_path)
+    _assert_left_out(out)
+    assert PARC in out["input_note"]
+
+
+def test_missed_gray_is_never_made_a_place_to_look_for_want_of_a_parcellation(tmp_path):
+    subj = write_subject(tmp_path / "fs6", pipeline="freesurfer", shape=(64, 64, 64))
+    write_qa_files(subj, pipeline="freesurfer", plant={"seg_blob": ((0.0, 16.0, 0.0), 4.0)})
+    (subj / "mri" / PARC).unlink()
+    assert [f["kind"] for f in _findings(subj, tmp_path)["findings"]] == []
