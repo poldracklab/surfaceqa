@@ -15,7 +15,7 @@ import numpy as np
 from surfaceqa.cohort import Cohort, failed_cohort, load_cohort, update_cohorts
 from surfaceqa.contours import SURFACE_ORDER, pack_plane, plane_segments
 from surfaceqa.discover import SubjectRef
-from surfaceqa.fingerprint import surface_fingerprint
+from surfaceqa.fingerprint import run_fingerprint
 from surfaceqa.geometry import DisplayVolume, load_display_volume, to_grid
 from surfaceqa.layout import current_run_dir, replace_text, run_meta, subject_dir, subject_folders
 from surfaceqa.pipelines import PipelineInfo, SubjectFiles, detect_pipeline, subject_files
@@ -169,7 +169,7 @@ def _prepare_subject(ref: SubjectRef, qa_dir: Path) -> BuildResult:
     pipeline, files = detect_pipeline(ref.path), subject_files(ref.path)
     if files.missing:
         return _report_missing(ref, pipeline, files, folder)
-    run = surface_fingerprint(files.surfaces)
+    run = run_fingerprint(files)
     run_dir = folder / "runs" / run
     rendered = _is_current(run_dir)
     if not rendered:

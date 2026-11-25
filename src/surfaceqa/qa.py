@@ -16,7 +16,7 @@ from surfaceqa import scoring
 from surfaceqa.scoring import finding_points, suspicion_score
 from surfaceqa.subjectdata import SubjectData
 
-QA_VERSION = 10  # raise whenever indicators, regions or scoring change, so findings are recomputed
+QA_VERSION = 11  # raise whenever indicators, regions or scoring change, so findings are recomputed
 FINDINGS_FILE = "findings.json"
 ERROR_FILE = "qa_error.txt"
 NON_BRAIN_REGIONS = {"sinus", "cerebellum", "outer_edge", "frontal_midline"}
@@ -45,6 +45,13 @@ def relabel_by_region(findings: list[Finding]) -> None:
     for finding in findings:
         if finding.kind == "gray_missed" and finding.region in NON_BRAIN_REGIONS:
             finding.kind = "look_here"
+
+
+def input_note(data: SubjectData) -> str:
+    """Which files were left out because their voxels are not where the T1's are."""
+    if not data.misaligned:
+        return ""
+    return f"not aligned with the T1, so not used: {', '.join(data.misaligned)}"
 
 
 def _indicator_record(result: IndicatorResult) -> dict:
@@ -79,7 +86,8 @@ def write_findings(data: SubjectData, run_dir: Path, inputs: dict | None = None)
     records, blob = _records_and_voxels(findings)
     out = {"qa_version": QA_VERSION, "inputs": inputs or {},
            "score": suspicion_score(findings), "thresholds": thresholds.as_dict(),
-           "scoring": scoring.as_dict(), "region_note": region_note, "indicators": [_indicator_record(r) for r in results],
+           "scoring": scoring.as_dict(), "region_note": region_note,
+           "input_note": input_note(data), "indicators": [_indicator_record(r) for r in results],
            "findings": records, "defaults": default_locations(data)}
     (Path(run_dir) / VOXELS_FILE).write_bytes(blob)
     replace_text(Path(run_dir) / FINDINGS_FILE, json.dumps(out, indent=1))

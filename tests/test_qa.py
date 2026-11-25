@@ -134,5 +134,5 @@ def test_cohort_finding_is_written_with_a_region(tmp_path, monkeypatch):
     found = write_findings(data, tmp_path)
     (finding,) = [f for f in found["findings"] if f["indicator"] == "cohort_thickness"]
     assert finding["region"] and finding["hemi"] == "lh" and finding["kind"] == "thickness"
-    assert found["qa_version"] == 10
+    assert found["qa_version"] == 11
     assert found["thresholds"]["MIN_COHORT"] == 30
