@@ -63,12 +63,16 @@ def test_assign_region(kind, grid, region):
     assert assign_region(f(kind, grid), build_context(toy())) == region
 
 
-def test_without_parcellation_everything_is_outer_edge_and_says_why():
+@pytest.mark.parametrize("kind, grid", [("pial_out", (28, 15, 40)), ("crossing", (30, 40, 40))])
+def test_without_parcellation_no_finding_is_given_a_region_and_the_context_says_why(kind, grid):
+    """A subject without a parcellation is left out of the indicators: there is no region
+    to fall back on, because "the outer edge" would be a claim about where the finding is."""
     data = toy()
     data.parc = None
     ctx = build_context(data)
-    assert assign_region(f("pial_out", (28, 15, 40)), ctx) == "outer_edge" and "aparc" in ctx.reason
-    assert assign_region(f("crossing", (30, 40, 40)), ctx) == "crossing"
+    assert "aparc" in ctx.reason
+    with pytest.raises(ValueError):
+        assign_region(f(kind, grid), ctx)
 
 
 def test_regions_are_in_checklist_order():

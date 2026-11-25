@@ -699,3 +699,28 @@ def test_index_start_controls_are_only_shown_when_given(qa):
     assert 'action="/start/check"' not in no_record and 'href="/start"' in no_record
     busy = render_index(records, View(serving=True), start={"can_check": True, "building": True})
     assert 'action="/start/check"' not in busy and 'href="/start/progress"' in busy
+
+
+# ---- a subject without a parcellation -----------------------------------------------------------
+
+def test_a_subject_without_a_parcellation_is_shown_but_not_scored_or_ranked(tmp_path):
+    import csv
+    from surfaceqa.export import export_tables
+    for name in ("sub-01", "sub-02", "sub-03"):
+        subj = write_subject(tmp_path / "study", name=name, shape=(64, 64, 64))
+        write_qa_files(subj, plant={"ribbon_blob": ((0.0, 0.0, 16.0), 4.0)})
+    (tmp_path / "study" / "sub-02" / "mri" / "aparc.DKTatlas+aseg.mgz").unlink()
+    qa = tmp_path / "qa"
+    build_all(find_subjects([tmp_path / "study"]), qa)
+    write_site(qa)
+    records = {r["name"]: r for r in subject_records(qa)}
+    left_out = records["sub-02"]
+    assert left_out["has_run"] and left_out["status"] == "ready"
+    assert left_out["score"] is None and left_out["rank"] is None
+    assert records["sub-01"]["rank"]["of"] == 2  # ranked among the subjects that were scored
+    page = (qa / "subjects" / "study__sub-02" / "index.html").read_text()
+    assert "No indicator could run" in page and "aparc.DKTatlas+aseg.mgz" in page
+    export_tables(qa)
+    with open(qa / "export" / "indicators.tsv", newline="") as handle:
+        rows = [r for r in csv.DictReader(handle, delimiter="\t") if r["key"] == "study__sub-02"]
+    assert rows and {r["status"] for r in rows} == {"not run"} and {r["score"] for r in rows} == {""}
