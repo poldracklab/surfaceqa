@@ -20,11 +20,16 @@ be installed.
   subjects folder (or `~/surfaceqa/<folder name>` when that place cannot be written). The start
   page shows the place before you build and lets you change it.
 - The start page lists the projects you opened before, and opens a QA directory someone else
-  built.
+  built. Such a directory is treated as data: nothing in it decides where surfaceqa writes, and
+  its report page is shown without running any script it may contain.
 - A build can be cancelled; building the same folder again continues where it stopped. "Check
   for new or changed subjects" on a project's index page builds its folders again.
-- The address printed at start carries a token. Other users of the same machine cannot use
-  your copy of the tool without it.
+- The address printed at start carries a token, which your browser then keeps in a cookie.
+  Other users of the same machine cannot use your copy of the tool without it. One limit:
+  browsers send a cookie to every port of the same host, so if another user of the machine
+  runs a web page of their own on it and you open that page in the same browser while
+  surfaceqa is running, their page receives the token. On a machine that others can log
+  in to, do not open local addresses you do not know while surfaceqa is running.
 
 Until the package is on PyPI, or to run the latest code:
 
@@ -60,8 +65,8 @@ uv run surfaceqa build /data/derivatives/fastsurfer --out /data/qa --jobs 4
 ```
 Renders a report for every subject in one or more FastSurfer or `recon-all` subjects folders
 (or single subject folders) into a QA directory. Nothing is written into the source folders.
-Safe to rerun: unchanged subjects are skipped, and a subject whose surfaces changed gets a new
-run while the old one is kept.
+Safe to rerun: unchanged subjects are skipped, and a subject whose surfaces or T1 changed gets a
+new run, which needs a new review, while the old one is kept.
 
 ```
 uv run surfaceqa build /data/derivatives/fastsurfer --out /data/qa \
@@ -89,7 +94,8 @@ uv run surfaceqa export /data/qa
 ```
 Writes four tab-separated tables to `/data/qa/export/`: `ratings.tsv` (one row per subject,
 reviewer and item), `marks.tsv`, `final.tsv` and `indicators.tsv`. Only submitted reviews are
-exported.
+exported. A row about an earlier run of a subject gives the pipeline, version and edit state of
+that run, not of the current one; they are blank when the run's folder is no longer there.
 
 ```
 uv run surfaceqa report /data/qa
@@ -206,6 +212,17 @@ Adding or rebuilding a subject changes the comparison for the whole folder, so t
 recomputes the indicators of that folder's subjects. Slices and contours are not redone. This
 also happens for the rest of a folder when a build is limited with `--subjects`. A subject whose
 folder was deleted from the source, or whose latest build failed, no longer counts.
+
+## What the indicators need
+
+- The indicators place every finding in a region with `mri/aparc.DKTatlas+aseg.mgz`. A subject
+  without a usable one is left out of the indicators: it has no score and no rank, its page says
+  so, and it is reviewed by eye like any other.
+- The volumes the indicators read (segmentation, ribbon, `norm.mgz`, parcellation, sinus and
+  dura labels) must lie on the T1's grid: the same voxel at the same place in the scanner, to
+  0.1 mm. A file that does not is not used, and the subject page names it.
+- Two servers may show the same QA directory at once (for example `surfaceqa serve` for the lab
+  and the start page on your own machine); a review is stored by one of them at a time.
 
 ## The report
 
