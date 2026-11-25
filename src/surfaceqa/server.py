@@ -11,7 +11,7 @@ from fastapi.responses import (FileResponse, HTMLResponse, JSONResponse, PlainTe
                                RedirectResponse)
 from fastapi.staticfiles import StaticFiles
 
-from surfaceqa.layout import read_json
+from surfaceqa.layout import RUN_NAME, run_meta
 from surfaceqa.report import PAGE, REPORT_DIR, TABLES, report_made, write_report
 from surfaceqa.reviews import valid_reviewer
 from surfaceqa.server_start import StartMode, install_start, start_info
@@ -23,7 +23,6 @@ from surfaceqa.site import (View, render_guidance, render_index, render_subject,
 COOKIE = "surfaceqa_reviewer"
 ONE_YEAR = 365 * 24 * 3600
 MAX_BODY = 1_000_000  # bytes; a review is a few kilobytes
-RUN_NAME = re.compile(r"[0-9a-f]{12}")
 GATED = ("findings.json", "findings_voxels.bin")  # hidden from a blind reviewer until they submit
 # The files of a run that the viewer asks for. Nothing else in the QA directory is served as a
 # file: not the reviews, the final labels or the exports, and not the pages `build` wrote to
@@ -209,7 +208,7 @@ def run_viewer(request: Request, key: str, run: str):
         raise HTTPException(404)
     record = _record(request, key)
     folder = _qa_dir(request) / "subjects" / record["key"] / "runs" / run
-    meta = read_json(folder / "meta.json") if RUN_NAME.fullmatch(run) else None
+    meta = run_meta(folder)
     if meta is None:
         raise HTTPException(404)
     return render_viewer(record, meta, view)

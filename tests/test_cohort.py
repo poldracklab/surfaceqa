@@ -26,7 +26,7 @@ def _add(qa, source, name, maps, run=RUN, stamp="v1"):
     (run_dir.parent.parent / "current.json").write_text(json.dumps({"run": run}))
     origin = qa / "sources" / source / name
     origin.mkdir(parents=True, exist_ok=True)
-    (run_dir / "meta.json").write_text(json.dumps({"source": source, "path": str(origin), "run": run}))
+    (run_dir / "meta.json").write_text(json.dumps({"source": source, "name": name, "path": str(origin), "run": run}))
     if maps is not None:
         save_thickness_map(run_dir, maps, stamp)
     return run_dir

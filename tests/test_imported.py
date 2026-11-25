@@ -78,9 +78,10 @@ def test_a_current_run_that_is_not_a_run_name_is_no_run(qa, run):
     assert current_run_dir(qa, FIRST) is None
 
 
-def test_meta_naming_another_run_is_not_read(qa):
+def test_the_run_is_the_name_of_its_folder_whatever_meta_says(qa):
+    run_dir = _meta_file(qa).parent
     _edit_json(_meta_file(qa), run="../../../../x")
-    assert run_meta(_meta_file(qa).parent) is None
+    assert run_meta(run_dir)["run"] == run_dir.name
 
 
 @pytest.mark.parametrize("field", ["source", "name"])

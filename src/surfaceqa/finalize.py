@@ -4,16 +4,14 @@ import json
 from pathlib import Path
 
 from surfaceqa.consensus import combine
-from surfaceqa.layout import current_run_dir, read_json
+from surfaceqa.layout import current_run_dir, read_json, subject_folders
 from surfaceqa.protocol import item_ids, load_protocol
 from surfaceqa.review_store import list_reviews
 from surfaceqa.reviews import item_title
 
 
 def _keys_with_a_run(qa_dir: Path) -> list[tuple[str, str]]:
-    root = Path(qa_dir) / "subjects"
-    folders = sorted(p for p in root.iterdir() if p.is_dir()) if root.is_dir() else []
-    runs = [(folder.name, current_run_dir(qa_dir, folder.name)) for folder in folders]
+    runs = [(folder.name, current_run_dir(qa_dir, folder.name)) for folder in subject_folders(qa_dir)]
     return [(key, run_dir.name) for key, run_dir in runs if run_dir is not None]
 
 

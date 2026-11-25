@@ -11,7 +11,7 @@ from urllib.parse import quote
 from jinja2 import Environment, PackageLoader, select_autoescape
 
 from surfaceqa.build import load_meta
-from surfaceqa.layout import current_run_dir
+from surfaceqa.layout import current_run_dir, plain_name, replace_text, subject_folders
 from surfaceqa.compare import VIEWER_PAGE, candidates, run_metas
 from surfaceqa.checklist import checklist_sections, finding_text, scored_findings
 from surfaceqa.protocol import load_protocol
@@ -23,6 +23,7 @@ from surfaceqa.site_guidance import guidance_fields
 from surfaceqa.site_reviews import review_fields
 
 VIEW_ORDER = ("coronal", "sagittal", "axial")
+MISSING_FIELDS = ("path", "pipeline", "version", "missing")
 NO_RUN_TEMPLATE = {"missing files": "missing.html", "build failed": "failed.html"}
 
 
@@ -62,6 +63,14 @@ def _status(meta: dict | None, missing: dict | None, failed: bool) -> str:
     return "ready"
 
 
+def _missing_info(missing: dict | None) -> dict:
+    """What missing.json adds to a record: what it says about the subject, never where things
+    are. The key is the folder's name, and a name that is not a plain one is not believed."""
+    found = missing if isinstance(missing, dict) else {}
+    named = {field: found[field] for field in ("source", "name") if plain_name(found.get(field))}
+    return {**{field: found[field] for field in MISSING_FIELDS if field in found}, **named}
+
+
 def _subject_record(qa_dir: Path, folder: Path, view: View) -> dict:
     record = _build_record(qa_dir, folder)
     reviews = review_fields(qa_dir, record, view)
@@ -72,7 +81,8 @@ def _build_record(qa_dir: Path, folder: Path) -> dict:
     key = folder.name
     meta = load_meta(qa_dir, key)
     missing = _read_json(folder / "missing.json")
-    record = {**_fallback_info(key), **(meta or {}), **(missing or {}), "has_run": meta is not None}
+    record = {**_fallback_info(key), **(meta or {}), **_missing_info(missing), "key": key,
+              "has_run": meta is not None}
     record["status"] = _status(meta, missing, (folder / "error.txt").is_file())
     version = f" {record['version']}" if record.get("version") else ""
     return {**record, "pipeline_label": f"{record['pipeline']}{version}",
@@ -136,9 +146,7 @@ def _ordered(records: list[dict], view: View) -> list[dict]:
 def subject_records(qa_dir: Path, view: View = View()) -> list[dict]:
     """Every subject in the QA directory as `view.reviewer` may see it, in review order."""
     qa_dir = Path(qa_dir)
-    root = qa_dir / "subjects"
-    folders = sorted(p for p in root.iterdir() if p.is_dir()) if root.is_dir() else []
-    records = [_subject_record(qa_dir, folder, view) for folder in folders]
+    records = [_subject_record(qa_dir, folder, view) for folder in subject_folders(qa_dir)]
     _add_ranks(records)
     for record in records:
         record["compare"] = candidates(qa_dir, record, records)
@@ -199,16 +207,20 @@ def render_guidance(record: dict, view: View = View()) -> str:
 
 
 def _copy_static(qa_dir: Path) -> None:
-    source = resources.files("surfaceqa") / "web" / "static"
+    """A fresh copy: files already there may be links, and a copy would be written through them."""
+    source, target = resources.files("surfaceqa") / "web" / "static", qa_dir / "static"
+    if target.is_symlink() or target.is_file():
+        target.unlink()
+    shutil.rmtree(target, ignore_errors=True)
     with resources.as_file(source) as path:
-        shutil.copytree(path, qa_dir / "static", dirs_exist_ok=True)
+        shutil.copytree(path, target)
 
 
 def _write_viewers(qa_dir: Path, record: dict) -> None:
     for meta in run_metas(qa_dir, record["key"]):
         if meta.get("run"):
             folder = qa_dir / "subjects" / record["key"] / "runs" / meta["run"]
-            (folder / VIEWER_PAGE).write_text(render_viewer(record, meta))
+            replace_text(folder / VIEWER_PAGE, render_viewer(record, meta))
 
 
 def write_site(qa_dir: Path) -> None:
@@ -217,6 +229,6 @@ def write_site(qa_dir: Path) -> None:
     records = subject_records(qa_dir)
     _copy_static(qa_dir)
     for record in records:
-        (qa_dir / "subjects" / record["key"] / "index.html").write_text(render_subject(record))
+        replace_text(qa_dir / "subjects" / record["key"] / "index.html", render_subject(record))
         _write_viewers(qa_dir, record)
-    (qa_dir / "index.html").write_text(render_index(records))
+    replace_text(qa_dir / "index.html", render_index(records))

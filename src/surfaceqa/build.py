@@ -17,7 +17,7 @@ from surfaceqa.contours import SURFACE_ORDER, pack_plane, plane_segments
 from surfaceqa.discover import SubjectRef
 from surfaceqa.fingerprint import surface_fingerprint
 from surfaceqa.geometry import DisplayVolume, load_display_volume, to_grid
-from surfaceqa.layout import current_run_dir, read_json, replace_text, subject_dir
+from surfaceqa.layout import current_run_dir, replace_text, run_meta, subject_dir, subject_folders
 from surfaceqa.pipelines import PipelineInfo, SubjectFiles, detect_pipeline, subject_files
 from surfaceqa.planes import PLANES, Plane
 from surfaceqa.provenance import write_provenance
@@ -245,8 +245,7 @@ def _also_affected(qa_dir: Path, changed: set[str], built: list[SubjectRef]) -> 
     compared with. Only subjects whose source folder is still there can be recomputed.
     """
     asked, jobs = {ref.key for ref in built}, []
-    root = qa_dir / "subjects"
-    for folder in sorted(p for p in root.iterdir() if p.is_dir()) if root.is_dir() else []:
+    for folder in subject_folders(qa_dir):
         meta = load_meta(qa_dir, folder.name)
         if (meta and folder.name not in asked and meta.get("source") in changed
                 and Path(meta.get("path") or "\0").is_dir()):
@@ -299,4 +298,4 @@ def build_all(refs: list[SubjectRef], qa_dir: Path, jobs: int = 1, progress=None
 
 def load_meta(qa_dir: Path, key: str) -> dict | None:
     run_dir = current_run_dir(qa_dir, key)
-    return None if run_dir is None else read_json(run_dir / "meta.json")
+    return None if run_dir is None else run_meta(run_dir)

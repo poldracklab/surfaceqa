@@ -4,7 +4,7 @@ import re
 from pathlib import Path
 from urllib.parse import quote
 
-from surfaceqa.layout import read_json, subject_dir
+from surfaceqa.layout import run_meta, subject_dir
 
 SESSION = re.compile(r"_ses-.*$")
 PREFIX = re.compile(r"^(?:sub-|subj-?(?=\d)|sub(?=\d))")
@@ -30,7 +30,7 @@ def run_metas(qa_dir: Path, key: str) -> list[dict]:
     """The meta of every finished run of a subject, newest first."""
     runs = subject_dir(qa_dir, key) / "runs"
     folders = [p for p in runs.iterdir() if p.is_dir()] if runs.is_dir() else []
-    metas = [meta for meta in (read_json(p / "meta.json") for p in folders) if meta]
+    metas = [meta for meta in map(run_meta, folders) if meta]
     return sorted(metas, key=lambda meta: meta.get("built", ""), reverse=True)
 
 

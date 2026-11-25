@@ -9,7 +9,8 @@ from pathlib import Path
 import numpy as np
 
 from surfaceqa import thresholds
-from surfaceqa.layout import current_run_dir, read_json, replace_file, replace_text
+from surfaceqa.layout import (current_run_dir, read_json, replace_file, replace_text, run_meta,
+                               subject_folders)
 from surfaceqa.pipelines import HEMIS
 from surfaceqa.thickness_map import load_thickness_map, map_signature
 
@@ -41,7 +42,7 @@ def _member(qa_dir: Path, folder: Path) -> tuple[str, Path] | None:
     if (folder / "missing.json").exists() or (folder / "error.txt").exists():
         return None
     run_dir = current_run_dir(qa_dir, folder.name)
-    meta = read_json(run_dir / "meta.json") if run_dir is not None else None
+    meta = run_meta(run_dir) if run_dir is not None else None
     if not meta or not meta.get("source") or not Path(meta.get("path") or "\0").is_dir():
         return None
     return (meta["source"], run_dir) if map_signature(run_dir) is not None else None
@@ -49,9 +50,8 @@ def _member(qa_dir: Path, folder: Path) -> tuple[str, Path] | None:
 
 def _members(qa_dir: Path) -> dict[str, dict[str, Path]]:
     """source -> {subject key: current run folder} for the subjects that belong to its cohort."""
-    root = Path(qa_dir) / "subjects"
     sources: dict[str, dict[str, Path]] = {}
-    for folder in sorted(p for p in root.iterdir() if p.is_dir()) if root.is_dir() else []:
+    for folder in subject_folders(qa_dir):
         found = _member(Path(qa_dir), folder)
         if found is not None:
             sources.setdefault(found[0], {})[folder.name] = found[1]
