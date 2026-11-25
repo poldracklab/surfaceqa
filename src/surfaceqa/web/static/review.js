@@ -4,6 +4,7 @@ import {refreshGuidance} from "./guidance.js";
 
 const SAVE_DELAY = 500; // ms after the last change
 const ZOOM_MM = 60;
+const WRITER = L.writerId();
 const data = JSON.parse(document.getElementById("review-data").textContent);
 const {protocol, key} = data;
 const review = data.review;
@@ -20,7 +21,7 @@ const ui = {
   status: document.getElementById("save-status"), help: document.getElementById("help"),
 };
 const state = {current: null, timer: null, saving: Promise.resolve(), dirty: false, locked: false, viewer: null,
-  failures: 0, retry: null};
+  failures: 0, retry: null, seq: 0};
 
 function scaleOf(id) {
   return PASSES.includes(id) ? protocol.pass_scale : protocol.region_scale;
@@ -104,9 +105,12 @@ function showAll() {
 function payload(extra = {}) {
   const marks = review.marks.map(({region, kind, grid, surface, finding, note}) => ({region, kind, grid, surface, finding, note}));
   // reviewer and saved let the server refuse a page that is out of date: opened under
-  // another name, or behind a save made in another window
+  // another name, or behind a save made in another window. writer and seq tell it which
+  // page this is and which of its saves, so two of them on their way at once (one sent
+  // on leaving) or one sent again after a lost answer are stored in order, not refused.
   return {run: review.run, reviewer: review.reviewer, saved: review.saved, items: review.items, marks,
-    grade: review.grade, notes: review.notes, unratable: review.unratable, ...extra};
+    grade: review.grade, notes: review.notes, unratable: review.unratable,
+    writer: WRITER, seq: ++state.seq, ...extra};
 }
 
 function lock(message) {

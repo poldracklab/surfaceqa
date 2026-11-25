@@ -29,7 +29,7 @@ def item_title(item_id: str) -> str:
 
 def empty_review(key: str, run: str, reviewer: str) -> dict:
     return {"protocol": load_protocol()["version"], "key": key, "run": run, "reviewer": reviewer,
-            "saved": None, "submitted": None, "revised": False, "skipped": False,
+            "saved": None, "submitted": None, "revised": False, "skipped": False, "writer": None,
             "unratable": None,
             "items": {item: {"rating": None, "note": ""} for item in item_ids()},
             "marks": [], "grade": None, "notes": ""}
@@ -130,6 +130,14 @@ def _stamps_ok(raw: dict) -> bool:
     return isinstance(raw.get("saved"), str) and (submitted is None or isinstance(submitted, str))
 
 
+def _writer(value) -> dict | None:
+    """Which page stored the review and which of its saves it was; None when not recorded."""
+    if not isinstance(value, dict):
+        return None
+    name, seq = value.get("id"), value.get("seq")
+    return {"id": name, "seq": seq} if isinstance(name, str) and type(seq) is int else None
+
+
 def stored_review(raw) -> dict | None:
     """A review read from disk, checked by the same rules as one from a browser.
 
@@ -147,7 +155,8 @@ def stored_review(raw) -> dict | None:
         return None
     marks = [{**mark, **_location(sent)} for mark, sent in zip(review["marks"], raw["marks"])]
     return {**review, "marks": marks, "protocol": raw.get("protocol"), "saved": raw["saved"],
-            "submitted": raw["submitted"], "revised": raw.get("revised") is True}
+            "submitted": raw["submitted"], "revised": raw.get("revised") is True,
+            "writer": _writer(raw.get("writer"))}
 
 
 def _unmarked_major(review: dict) -> list[str]:

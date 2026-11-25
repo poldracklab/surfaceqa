@@ -254,6 +254,13 @@ export function cursorFromMessage(message, meta) {
   return applyAffine(toGrid, point).map(Math.round);
 }
 
+// The name a review page gives itself when it opens, so the server can tell this page's
+// saves from those of another window. (crypto.randomUUID needs https; this does not.)
+export function writerId() {
+  const bytes = crypto.getRandomValues(new Uint8Array(16));
+  return [...bytes].map((byte) => byte.toString(16).padStart(2, "0")).join("");
+}
+
 // How long to wait before trying a failed save again: 2 s, doubling, at most 30 s.
 export function retryDelay(failures) {
   return Math.min(30000, 1000 * 2 ** Math.min(failures, 10));

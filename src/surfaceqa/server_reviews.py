@@ -1,5 +1,6 @@
 """What the server does with a review that a browser sends."""
 
+import re
 from pathlib import Path
 
 from surfaceqa.marks import locate_marks
@@ -13,6 +14,7 @@ REBUILT = ("This subject was rebuilt and its surfaces changed, so this review no
 
 OTHER_WINDOW = ("This review was changed in another window after this page was opened. "
                 "Reload the page to continue from the saved review.")
+WRITER_ID = re.compile(r"[0-9A-Za-z-]{1,64}")  # the name a page gives itself when it opens
 STAY_COMPLETE = "This review is submitted, so it has to stay complete. Not saved:"
 
 
@@ -52,6 +54,17 @@ def _checked(record: dict, reviewer: str, payload) -> dict:
         raise Refused(422, str(error)) from error
 
 
+def _writer(payload: dict) -> dict | None:
+    """Which page sent this and which of its saves it is; None from a page that does not say."""
+    name, seq = payload.get("writer"), payload.get("seq")
+    if name is None and seq is None:
+        return None
+    named = isinstance(name, str) and WRITER_ID.fullmatch(name) is not None
+    if not named or type(seq) is not int or seq < 0:
+        raise Refused(422, "writer and seq: the page must name itself and number its saves")
+    return {"id": name, "seq": seq}
+
+
 def store_review(qa_dir: Path, record: dict, reviewer: str, payload, submit: bool) -> dict:
     """Save what the browser sent and, when asked and complete, submit it: one write.
 
@@ -59,6 +72,7 @@ def store_review(qa_dir: Path, record: dict, reviewer: str, payload, submit: boo
     saw; a page that is out of date in either respect is refused, not written.
     """
     review = _checked(record, reviewer, payload)
+    writer = _writer(payload)
     stored = load_review(qa_dir, record["key"], record["run"], reviewer)
     missing = missing_for_submit(review)
     if missing and stored and stored["submitted"]:
@@ -66,7 +80,7 @@ def store_review(qa_dir: Path, record: dict, reviewer: str, payload, submit: boo
     review = locate_marks(review, record, stored)
     store = submit_review if submit and not missing else save_review
     try:
-        review = store(qa_dir, review, expected=payload.get("saved"))
+        review = store(qa_dir, review, expected=payload.get("saved"), writer=writer)
     except Conflict:
         raise Refused(409, OTHER_WINDOW) from None
     if submit and missing:
