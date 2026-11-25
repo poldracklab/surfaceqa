@@ -14,7 +14,7 @@ from fastapi.staticfiles import StaticFiles
 from surfaceqa.layout import RUN_NAME, run_meta
 from surfaceqa.report import PAGE, REPORT_DIR, TABLES, report_made, write_report
 from surfaceqa.reviews import valid_reviewer
-from surfaceqa.server_start import StartMode, install_start, start_info
+from surfaceqa.server_start import StartMode, install_start, local_path, start_info
 from surfaceqa.server_reviews import (Refused, current_review, has_submitted, next_subject,
                                       store_review)
 from surfaceqa.site import (View, render_guidance, render_index, render_subject, render_viewer,
@@ -30,6 +30,11 @@ GATED = ("findings.json", "findings_voxels.bin")  # hidden from a blind reviewer
 PLANE = "(coronal|sagittal|axial)"
 RUN_FILE = re.compile(rf"meta\.json|findings\.json|findings_voxels\.bin|contours_{PLANE}\.(bin|json)"
                       rf"|slices/{PLANE}/\d{{3,4}}\.jpg")
+# The report is a file of the QA directory, which someone else may have made: it is shown
+# with the tool's style sheet and its own styles, and can run no script and send no form.
+REPORT_POLICY = ("default-src 'none'; style-src 'self' 'unsafe-inline'; form-action 'none'; "
+                 "base-uri 'none'; frame-ancestors 'none'")
+REPORT_HEADERS = {"content-security-policy": REPORT_POLICY, "x-content-type-options": "nosniff"}
 BAD_NAME = ("A reviewer name is 1 to 40 letters, digits, - or _ and starts with a letter or "
             "digit; no spaces. Capitals are stored as lower case.")
 
@@ -67,19 +72,13 @@ def _reviewable(request: Request, key: str) -> tuple[dict, str]:
     return record, reviewer
 
 
-def _local(target: str) -> str:
-    """A redirect target on this site, or the index."""
-    ok = target.startswith("/") and not target.startswith("//") and "\\" not in target
-    return target if ok else "/"
-
-
 @router.post("/reviewer")
 async def set_reviewer(request: Request):
     form = parse_qs((await request.body()).decode(errors="replace"), keep_blank_values=True)
     name = form.get("name", [""])[0].strip().lower()
     if not valid_reviewer(name):
         return HTMLResponse(f"<p>{BAD_NAME}</p><p><a href='/'>Back</a></p>", status_code=400)
-    response = RedirectResponse(_local(form.get("next", ["/"])[0]), status_code=303)
+    response = RedirectResponse(local_path(form.get("next", ["/"])[0]), status_code=303)
     response.set_cookie(COOKIE, name, max_age=ONE_YEAR, samesite="lax", httponly=True)
     return response
 
@@ -121,7 +120,7 @@ def report_file(request: Request, name: str):
     if name not in (PAGE, *TABLES) or not path.is_file():
         raise HTTPException(404)
     kind = "text/html" if name == PAGE else "text/tab-separated-values"
-    return FileResponse(path, media_type=kind, headers={"cache-control": "no-cache"})
+    return FileResponse(path, media_type=kind, headers={"cache-control": "no-cache", **REPORT_HEADERS})
 
 
 @router.get("/subjects/{key}/", response_class=HTMLResponse)
